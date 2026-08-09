@@ -1,0 +1,103 @@
+import 'package:flutter/services.dart';
+
+class LauncherService {
+  static const _systemChannel = MethodChannel('co.za.launcher3.swavoti/system');
+  static const _widgetChannel = MethodChannel('co.za.launcher3.swavoti/widgets');
+  static const _notificationChannel = EventChannel('co.za.launcher3.swavoti/notifications');
+
+  // System Actions
+  static Future<void> uninstallApp(String packageName) async {
+    try {
+      await _systemChannel.invokeMethod('uninstallApp', {'packageName': packageName});
+    } catch (e) {
+      print('Error uninstalling app: $e');
+    }
+  }
+
+  static Future<void> openAppInfo(String packageName) async {
+    try {
+      await _systemChannel.invokeMethod('appInfo', {'packageName': packageName});
+    } catch (e) {
+      print('Error opening app info: $e');
+    }
+  }
+
+  static Future<void> changeWallpaper() async {
+    try {
+      await _systemChannel.invokeMethod('changeWallpaper');
+    } catch (e) {
+      print('Error changing wallpaper: $e');
+    }
+  }
+
+  static Future<void> openGoogleDiscover() async {
+    try {
+      await _systemChannel.invokeMethod('openGoogleDiscover');
+    } catch (e) {
+      print('Error opening Google Discover: $e');
+    }
+  }
+
+  static Future<void> openNotificationSettings() async {
+    try {
+      await _systemChannel.invokeMethod('openNotificationSettings');
+    } catch (e) {
+      print('Error opening Notification Settings: $e');
+    }
+  }
+
+  // Widget Actions
+  static Future<List<Map<String, dynamic>>> getAllWidgets() async {
+    try {
+      final List<dynamic>? widgets = await _widgetChannel.invokeMethod('getAllWidgets');
+      if (widgets != null) {
+        return widgets.map((w) => Map<String, dynamic>.from(w as Map)).toList();
+      }
+    } catch (e) {
+      print('Error getting widgets: $e');
+    }
+    return [];
+  }
+
+  static Future<int> allocateWidgetId() async {
+    try {
+      final int? id = await _widgetChannel.invokeMethod('allocateWidgetId');
+      return id ?? -1;
+    } catch (e) {
+      print('Error allocating widget ID: $e');
+      return -1;
+    }
+  }
+
+  static Future<bool> bindWidget(int appWidgetId, String providerPackage, String providerClass) async {
+    try {
+      final bool? success = await _widgetChannel.invokeMethod('bindWidget', {
+        'appWidgetId': appWidgetId,
+        'providerPackage': providerPackage,
+        'providerClass': providerClass,
+      });
+      return success ?? false;
+    } catch (e) {
+      print('Error binding widget: $e');
+      return false;
+    }
+  }
+
+  static Future<void> deleteWidgetId(int appWidgetId) async {
+    try {
+      await _widgetChannel.invokeMethod('deleteWidgetId', {'appWidgetId': appWidgetId});
+    } catch (e) {
+      print('Error deleting widget ID: $e');
+    }
+  }
+
+  // Notifications Stream
+  static Stream<Map<String, int>> get notificationsStream {
+    return _notificationChannel.receiveBroadcastStream().map((event) {
+      if (event is Map) {
+        return Map<String, int>.from(event);
+      }
+      return {};
+    });
+  }
+}
