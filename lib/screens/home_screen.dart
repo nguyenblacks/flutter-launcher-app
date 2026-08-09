@@ -2,7 +2,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:device_apps/device_apps.dart';
+import 'package:installed_apps/installed_apps.dart';
+import 'package:installed_apps/app_info.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:swavoti/services/launcher_service.dart';
 import 'package:swavoti/screens/widget_bottomsheet.dart';
@@ -483,13 +484,13 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     } else {
       // App icon
-      return FutureBuilder<Application?>(
-        future: DeviceApps.getApp(item.packageName, true),
+      return FutureBuilder<AppInfo?>(
+        future: InstalledApps.getAppInfo(item.packageName),
         builder: (context, snapshot) {
           if (!snapshot.hasData || snapshot.data == null) {
             return const SizedBox.shrink();
           }
-          final app = snapshot.data as ApplicationWithIcon;
+          final app = snapshot.data!;
           final notificationCount = widget.notifications[item.packageName] ?? 0;
 
           return Container(
@@ -499,11 +500,14 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 Stack(
                   children: [
-                    Image.memory(
-                      app.icon,
-                      width: 48,
-                      height: 48,
-                    ),
+                    if (app.icon != null)
+                      Image.memory(
+                        app.icon!,
+                        width: 48,
+                        height: 48,
+                      )
+                    else
+                      const Icon(Icons.android, size: 48),
                     if (notificationCount > 0)
                       Positioned(
                         right: 0,
@@ -533,7 +537,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  app.appName,
+                  app.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(

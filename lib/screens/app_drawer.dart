@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:device_apps/device_apps.dart';
+import 'package:installed_apps/installed_apps.dart';
+import 'package:installed_apps/app_info.dart';
 import 'package:swavoti/services/launcher_service.dart';
 
 class AppDrawer extends StatefulWidget {
@@ -31,8 +32,8 @@ class _WorkspaceItemData {
 }
 
 class _AppDrawerState extends State<AppDrawer> {
-  List<Application> _apps = [];
-  List<Application> _filteredApps = [];
+  List<AppInfo> _apps = [];
+  List<AppInfo> _filteredApps = [];
   bool _isLoading = true;
   final TextEditingController _searchController = TextEditingController();
 
@@ -50,12 +51,13 @@ class _AppDrawerState extends State<AppDrawer> {
   }
 
   Future<void> _loadApps() async {
-    final apps = await DeviceApps.getInstalledApplications(
-      includeAppIcons: true,
-      onlyAppsWithLaunchIntent: true,
+    final apps = await InstalledApps.getInstalledApps(
+      excludeSystemApps: false,
+      excludeNonLaunchableApps: true,
+      withIcon: true,
     );
     // Sort apps alphabetically
-    apps.sort((a, b) => a.appName.toLowerCase().compareTo(b.appName.toLowerCase()));
+    apps.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
     if (mounted) {
       setState(() {
@@ -70,17 +72,17 @@ class _AppDrawerState extends State<AppDrawer> {
     final query = _searchController.text.toLowerCase();
     setState(() {
       _filteredApps = _apps
-          .where((app) => app.appName.toLowerCase().contains(query))
+          .where((app) => app.name.toLowerCase().contains(query))
           .toList();
     });
   }
 
-  void _showAppOptions(Application app) {
+  void _showAppOptions(AppInfo app) {
     showDialog(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: Text(app.appName),
+          title: Text(app.name),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -166,12 +168,13 @@ class _AppDrawerState extends State<AppDrawer> {
                         ),
                         itemCount: _filteredApps.length,
                         itemBuilder: (context, index) {
-                          final app = _filteredApps[index] as ApplicationWithIcon;
+                          final app = _filteredApps[index];
                           final notificationCount = widget.notifications[app.packageName] ?? 0;
+                          final icon = app.icon;
 
                           final appItemData = _WorkspaceItemData(
                             packageName: app.packageName,
-                            label: app.appName,
+                            label: app.name,
                           ).toMap();
 
                           return LongPressDraggable<Map<String, dynamic>>(
@@ -187,10 +190,13 @@ class _AppDrawerState extends State<AppDrawer> {
                                 child: Column(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Image.memory(app.icon, width: 56, height: 56),
+                                    if (icon != null)
+                                      Image.memory(icon, width: 56, height: 56)
+                                    else
+                                      const Icon(Icons.android, size: 56),
                                     const SizedBox(height: 4),
                                     Text(
-                                      app.appName,
+                                      app.name,
                                       style: const TextStyle(
                                         color: Colors.white,
                                         fontSize: 12,
@@ -205,10 +211,13 @@ class _AppDrawerState extends State<AppDrawer> {
                               opacity: 0.3,
                               child: Column(
                                 children: [
-                                  Image.memory(app.icon, width: 48, height: 48),
+                                  if (icon != null)
+                                    Image.memory(icon, width: 48, height: 48)
+                                  else
+                                    const Icon(Icons.android, size: 48),
                                   const SizedBox(height: 4),
                                   Text(
-                                    app.appName,
+                                    app.name,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: const TextStyle(fontSize: 11),
@@ -217,13 +226,16 @@ class _AppDrawerState extends State<AppDrawer> {
                               ),
                             ),
                             child: GestureDetector(
-                              onTap: () => DeviceApps.openApp(app.packageName),
+                              onTap: () => InstalledApps.startApp(app.packageName),
                               onLongPress: () => _showAppOptions(app),
                               child: Column(
                                 children: [
                                   Stack(
                                     children: [
-                                      Image.memory(app.icon, width: 48, height: 48),
+                                      if (icon != null)
+                                        Image.memory(icon, width: 48, height: 48)
+                                      else
+                                        const Icon(Icons.android, size: 48),
                                       if (notificationCount > 0)
                                         Positioned(
                                           right: 0,
@@ -253,7 +265,7 @@ class _AppDrawerState extends State<AppDrawer> {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    app.appName,
+                                    app.name,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     textAlign: TextAlign.center,
