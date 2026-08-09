@@ -172,7 +172,7 @@ class MainActivity : FlutterActivity() {
                         events?.success(map)
                     }
                     // Trigger initial
-                    NotificationDotService.listener?.invoke(NotificationDotService.activeNotifications)
+                    NotificationDotService.listener?.invoke(NotificationDotService.notificationCounts)
                 }
 
                 override fun onCancel(arguments: Any?) {
