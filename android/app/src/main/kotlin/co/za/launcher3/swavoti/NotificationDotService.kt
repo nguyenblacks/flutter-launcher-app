@@ -24,12 +24,15 @@ class NotificationDotService : NotificationListenerService() {
 
     private fun updateNotifications() {
         try {
-            val sbns: Array<out StatusBarNotification> = getActiveNotifications() ?: emptyArray()
+            val sbns = getActiveNotifications()
             val counts: MutableMap<String, Int> = mutableMapOf()
-            for (sbn in sbns) {
-                val pkg: String = sbn.packageName ?: continue
-                val current: Int = counts.getOrDefault(pkg, 0)
-                counts[pkg] = current + 1
+            if (sbns != null) {
+                for (sbn in sbns) {
+                    if (sbn == null) continue
+                    val pkg: String = sbn?.packageName ?: continue
+                    val current: Int = counts.getOrDefault(pkg, 0)
+                    counts[pkg] = current + 1
+                }
             }
             notificationCounts = counts
             listener?.invoke(counts)

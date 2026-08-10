@@ -16,6 +16,8 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.EventChannel
 import java.io.ByteArrayOutputStream
+import android.os.Handler
+import android.os.Looper
 
 class MainActivity : FlutterActivity() {
 
@@ -169,7 +171,9 @@ class MainActivity : FlutterActivity() {
             object : EventChannel.StreamHandler {
                 override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
                     NotificationDotService.listener = { map ->
-                        events?.success(map)
+                        Handler(Looper.getMainLooper()).post {
+                            events?.success(map)
+                        }
                     }
                     // Trigger initial
                     NotificationDotService.listener?.invoke(NotificationDotService.notificationCounts)
