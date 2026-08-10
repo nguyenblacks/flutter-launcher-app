@@ -136,6 +136,25 @@ class MainActivity : FlutterActivity() {
                     }
                     result.success(null)
                 }
+                "startApp" -> {
+                    val packageName = call.argument<String>("packageName")
+                    if (packageName != null) {
+                        try {
+                            val intent = packageManager.getLaunchIntentForPackage(packageName)
+                            if (intent != null) {
+                                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                startActivity(intent)
+                                result.success(true)
+                            } else {
+                                result.success(false)
+                            }
+                        } catch (e: Exception) {
+                            result.success(false)
+                        }
+                    } else {
+                        result.success(false)
+                    }
+                }
                 "appInfo" -> {
                     val packageName = call.argument<String>("packageName")
                     if (packageName != null) {
@@ -212,17 +231,24 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun drawableToByteArray(drawable: Drawable): ByteArray {
-        val bitmap = Bitmap.createBitmap(
-            Math.max(1, drawable.intrinsicWidth),
-            Math.max(1, drawable.intrinsicHeight),
-            Bitmap.Config.ARGB_8888
-        )
+        var width = Math.max(1, drawable.intrinsicWidth)
+        var height = Math.max(1, drawable.intrinsicHeight)
+        
+        // Scale down large drawables to prevent OOM / TransactionTooLargeException
+        val maxSize = 150
+        if (width > maxSize || height > maxSize) {
+            val ratio = Math.min(maxSize.toFloat() / width, maxSize.toFloat() / height)
+            width = (width * ratio).toInt()
+            height = (height * ratio).toInt()
+        }
+
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         drawable.setBounds(0, 0, canvas.width, canvas.height)
         drawable.draw(canvas)
         
         val stream = ByteArrayOutputStream()
-        bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
+        bitmap.compress(Bitmap.CompressFormat.WEBP, 80, stream)
         return stream.toByteArray()
     }
 }

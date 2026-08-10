@@ -14,6 +14,14 @@ class LauncherService {
     }
   }
 
+  static Future<void> startApp(String packageName) async {
+    try {
+      await _systemChannel.invokeMethod('startApp', {'packageName': packageName});
+    } catch (e) {
+      print('Error starting app: $e');
+    }
+  }
+
   static Future<void> openAppInfo(String packageName) async {
     try {
       await _systemChannel.invokeMethod('appInfo', {'packageName': packageName});

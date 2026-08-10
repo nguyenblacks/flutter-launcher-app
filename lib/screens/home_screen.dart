@@ -8,6 +8,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:swavoti/services/launcher_service.dart';
 import 'package:swavoti/screens/widget_bottomsheet.dart';
 import 'package:swavoti/screens/home_settings.dart';
+import 'package:swavoti/services/weather_service.dart';
+import 'package:swavoti/widgets/weather_icon.dart';
+import 'package:swavoti/screens/workspace.dart';
+import 'dart:async';
 
 class LauncherItem {
   final String id;
@@ -77,8 +81,10 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   List<LauncherItem> _items = [];
-  int _searchWidgetId = -1;
-  bool _isGoogleSearchBound = false;
+  List<AppInfo> _dockApps = [];
+  WeatherData? _weatherData;
+  late Timer _timer;
+  DateTime _currentTime = DateTime.now();
 
   // Grid Configuration
   final int _columns = 4;
@@ -88,7 +94,55 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _loadItems();
-    _setupGoogleSearchWidget();
+    _loadWeather();
+    _loadDockApps();
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (mounted) setState(() => _currentTime = DateTime.now());
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadWeather() async {
+    final weather = await WeatherService.getCurrentWeather();
+    if (mounted && weather != null) {
+      setState(() => _weatherData = weather);
+    }
+  }
+
+  Future<void> _loadDockApps() async {
+    // Wait a bit for globalAppCache to populate
+    while (globalAppCache == null && mounted) {
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+    if (!mounted || globalAppCache == null) return;
+    
+    // Pick first 4 apps for the dock (or specific ones if available)
+    final apps = globalAppCache!;
+    final dockApps = <AppInfo>[];
+    
+    // Try to find common apps
+    final commonPackages = ['com.google.android.dialer', 'com.android.phone', 'com.google.android.apps.messaging', 'com.android.chrome', 'com.google.android.camera'];
+    for (var pkg in commonPackages) {
+      try {
+        final app = apps.firstWhere((a) => a.packageName == pkg);
+        if (dockApps.length < 4) dockApps.add(app);
+      } catch (_) {}
+    }
+    
+    // Fill the rest with whatever is available
+    for (var app in apps) {
+      if (dockApps.length >= 4) break;
+      if (!dockApps.any((d) => d.packageName == app.packageName)) dockApps.add(app);
+    }
+    
+    setState(() {
+      _dockApps = dockApps;
+    });
   }
 
   Future<void> _loadItems() async {
@@ -105,48 +159,7 @@ class _HomeScreenState extends State<HomeScreen> {
     await prefs.setStringList('launcher_items', data);
   }
 
-  Future<void> _setupGoogleSearchWidget() async {
-    final prefs = await SharedPreferences.getInstance();
-    _searchWidgetId = prefs.getInt('google_search_widget_id') ?? -1;
 
-    if (_searchWidgetId == -1) {
-      // Find the Google Search widget provider
-      final widgets = await LauncherService.getAllWidgets();
-      Map<String, dynamic>? googleSearchProvider;
-
-      for (var widget in widgets) {
-        final pkg = widget['providerPackage'] as String;
-        final cls = widget['providerClass'] as String;
-        if (pkg.contains('googlequicksearchbox') &&
-            (cls.contains('SearchWidget') || cls.contains('search'))) {
-          googleSearchProvider = widget;
-          break;
-        }
-      }
-
-      if (googleSearchProvider != null) {
-        final id = await LauncherService.allocateWidgetId();
-        if (id != -1) {
-          final success = await LauncherService.bindWidget(
-            id,
-            googleSearchProvider['providerPackage'],
-            googleSearchProvider['providerClass'],
-          );
-          if (success) {
-            _searchWidgetId = id;
-            await prefs.setInt('google_search_widget_id', id);
-            setState(() {
-              _isGoogleSearchBound = true;
-            });
-          }
-        }
-      }
-    } else {
-      setState(() {
-        _isGoogleSearchBound = true;
-      });
-    }
-  }
 
   void _showWorkspaceMenu() {
     showModalBottomSheet(
@@ -303,44 +316,53 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           children: [
             SizedBox(height: statusBarHeight + 16),
-            // Google Search Widget Area
+            // Time & Weather Widget Area
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: Container(
-                height: 80,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(28),
-                ),
-                child: _isGoogleSearchBound && _searchWidgetId != -1
-                    ? ClipRRect(
-                        borderRadius: BorderRadius.circular(28),
-                        child: AndroidView(
-                          viewType: 'widget_view',
-                          creationParams: {'appWidgetId': _searchWidgetId},
-                          creationParamsCodec: const StandardMessageCodec(),
-                        ),
-                      )
-                    : InkWell(
-                        onTap: () => LauncherService.openGoogleDiscover(),
-                        borderRadius: BorderRadius.circular(28),
-                        child: Row(
-                          children: [
-                            const SizedBox(width: 20),
-                            Image.network(
-                              'https://upload.wikimedia.org/wikipedia/commons/thumb/5/53/Google_%22G%22_Logo.svg/512px-Google_%22G%22_Logo.svg.png',
-                              height: 24,
-                              errorBuilder: (_, __, ___) => const Icon(Icons.search, color: Colors.white),
-                            ),
-                            const SizedBox(width: 16),
-                            const Text(
-                              'Search...',
-                              style: TextStyle(color: Colors.white60, fontSize: 16),
-                            ),
-                          ],
+              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${_currentTime.hour}:${_currentTime.minute.toString().padLeft(2, '0')}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 48,
+                          fontWeight: FontWeight.w300,
+                          shadows: [Shadow(blurRadius: 10.0, color: Colors.black54, offset: Offset(2, 2))],
                         ),
                       ),
+                      Text(
+                        '${_currentTime.day}/${_currentTime.month}/${_currentTime.year}',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.9),
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          shadows: const [Shadow(blurRadius: 5.0, color: Colors.black54)],
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (_weatherData != null)
+                    Row(
+                      children: [
+                        Text(
+                          '${_weatherData!.temperature.round()}°',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 36,
+                            fontWeight: FontWeight.w400,
+                            shadows: [Shadow(blurRadius: 8.0, color: Colors.black54, offset: Offset(2, 2))],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        WeatherIcon(weatherCode: _weatherData!.weatherCode, size: 56),
+                      ],
+                    ),
+                ],
               ),
             ),
             const SizedBox(height: 16),
@@ -438,24 +460,33 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
 
-            // Swipe Up Indicator / Dock area
+            // App Dock
             GestureDetector(
+              onVerticalDragUpdate: (details) {
+                if (details.primaryDelta! < -5) {
+                   widget.onOpenDrawer();
+                }
+              },
               onTap: widget.onOpenDrawer,
               child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                width: double.infinity,
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.keyboard_arrow_up,
-                      color: Colors.white.withValues(alpha: 0.6),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Swipe up for Apps',
-                      style: TextStyle(color: Colors.white60, fontSize: 12),
-                    ),
-                  ],
+                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+                margin: const EdgeInsets.only(bottom: 16, left: 16, right: 16),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(32),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: _dockApps.isEmpty 
+                    ? [const CircularProgressIndicator(color: Colors.white)]
+                    : _dockApps.map((app) {
+                    return GestureDetector(
+                      onTap: () => LauncherService.startApp(app.packageName),
+                      child: app.icon != null
+                          ? Image.memory(app.icon!, width: 56, height: 56)
+                          : const Icon(Icons.android, size: 56, color: Colors.white),
+                    );
+                  }).toList(),
                 ),
               ),
             ),

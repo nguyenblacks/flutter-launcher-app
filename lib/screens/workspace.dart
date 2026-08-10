@@ -3,6 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:swavoti/services/launcher_service.dart';
 import 'package:swavoti/screens/home_screen.dart';
 import 'package:swavoti/screens/app_drawer.dart';
+import 'package:installed_apps/installed_apps.dart';
+import 'package:installed_apps/app_info.dart';
+
+// Global cache for instant drawer loading
+List<AppInfo>? globalAppCache;
 
 class Workspace extends StatefulWidget {
   const Workspace({super.key});
@@ -25,6 +30,9 @@ class _WorkspaceState extends State<Workspace> with SingleTickerProviderStateMix
     super.initState();
     // Default to index 1 (HomeScreen). Index 0 is Google Discover trigger page.
     _pageController = PageController(initialPage: 1);
+    
+    // Pre-load apps for instant drawer
+    _preloadApps();
     
     _drawerController = AnimationController(
       vsync: this,
@@ -69,6 +77,19 @@ class _WorkspaceState extends State<Workspace> with SingleTickerProviderStateMix
     }
   }
 
+  Future<void> _preloadApps() async {
+    if (globalAppCache != null) return;
+    try {
+      final apps = await InstalledApps.getInstalledApps(
+        excludeSystemApps: false,
+        excludeNonLaunchableApps: true,
+        withIcon: true,
+      );
+      apps.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+      globalAppCache = apps;
+    } catch (_) {}
+  }
+
   void _openDrawer() {
     _drawerController.forward();
     setState(() {
@@ -107,7 +128,7 @@ class _WorkspaceState extends State<Workspace> with SingleTickerProviderStateMix
     _drawerHeight = MediaQuery.of(context).size.height;
 
     return Scaffold(
-      backgroundColor: Colors.black, // Dark background for transparent system bar style
+      backgroundColor: Colors.transparent, // Show device wallpaper
       body: Stack(
         children: [
           // Background PageView (Discover Placeholder & HomeScreen)

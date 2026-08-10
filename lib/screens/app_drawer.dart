@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:installed_apps/installed_apps.dart';
 import 'package:installed_apps/app_info.dart';
 import 'package:swavoti/services/launcher_service.dart';
+import 'package:swavoti/screens/workspace.dart'; // For globalAppCache
 
 class AppDrawer extends StatefulWidget {
   final Map<String, int> notifications;
@@ -51,12 +52,23 @@ class _AppDrawerState extends State<AppDrawer> {
   }
 
   Future<void> _loadApps() async {
+    if (globalAppCache != null && globalAppCache!.isNotEmpty) {
+      if (mounted) {
+        setState(() {
+          _apps = globalAppCache!;
+          _filteredApps = globalAppCache!;
+          _isLoading = false;
+        });
+      }
+      return;
+    }
+    
+    // Fallback if cache is empty
     final apps = await InstalledApps.getInstalledApps(
       excludeSystemApps: false,
       excludeNonLaunchableApps: true,
       withIcon: true,
     );
-    // Sort apps alphabetically
     apps.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
     if (mounted) {
@@ -65,6 +77,7 @@ class _AppDrawerState extends State<AppDrawer> {
         _filteredApps = apps;
         _isLoading = false;
       });
+      globalAppCache = apps;
     }
   }
 
@@ -81,28 +94,53 @@ class _AppDrawerState extends State<AppDrawer> {
     showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: Text(app.name),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.info_outline),
-                title: const Text('App Info'),
-                onTap: () {
-                  Navigator.pop(context);
-                  LauncherService.openAppInfo(app.packageName);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.delete_forever, color: Colors.red),
-                title: const Text('Uninstall', style: TextStyle(color: Colors.red)),
-                onTap: () {
-                  Navigator.pop(context);
-                  LauncherService.uninstallApp(app.packageName);
-                },
-              ),
-            ],
+        return Dialog(
+          backgroundColor: Theme.of(context).colorScheme.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    children: [
+                      if (app.icon != null)
+                        Image.memory(app.icon!, width: 32, height: 32)
+                      else
+                        const Icon(Icons.android, size: 32),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          app.name,
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(),
+                ListTile(
+                  leading: const Icon(Icons.info_outline),
+                  title: const Text('App Info'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    LauncherService.openAppInfo(app.packageName);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.delete_forever, color: Colors.red),
+                  title: const Text('Uninstall', style: TextStyle(color: Colors.red)),
+                  onTap: () {
+                    Navigator.pop(context);
+                    LauncherService.uninstallApp(app.packageName);
+                  },
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -158,7 +196,15 @@ class _AppDrawerState extends State<AppDrawer> {
                 ? const Center(child: CircularProgressIndicator())
                 : _filteredApps.isEmpty
                     ? const Center(child: Text('No apps found.'))
-                    : GridView.builder(
+                    : NotificationListener<ScrollUpdateNotification>(
+                        onNotification: (notification) {
+                          if (notification.metrics.pixels <= 0 && notification.scrollDelta != null && notification.scrollDelta! < -10) {
+                            widget.onClose();
+                            return true;
+                          }
+                          return false;
+                        },
+                        child: GridView.builder(
                         padding: const EdgeInsets.only(bottom: 24),
                         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: 4,
@@ -226,7 +272,7 @@ class _AppDrawerState extends State<AppDrawer> {
                               ),
                             ),
                             child: GestureDetector(
-                              onTap: () => InstalledApps.startApp(app.packageName),
+                              onTap: () => LauncherService.startApp(app.packageName),
                               onLongPress: () => _showAppOptions(app),
                               child: Column(
                                 children: [
@@ -277,6 +323,7 @@ class _AppDrawerState extends State<AppDrawer> {
                           );
                         },
                       ),
+                    ),
           ),
         ],
       ),
