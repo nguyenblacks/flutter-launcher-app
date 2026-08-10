@@ -3,11 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:swavoti/services/launcher_service.dart';
 import 'package:swavoti/screens/home_screen.dart';
 import 'package:swavoti/screens/app_drawer.dart';
-import 'package:installed_apps/installed_apps.dart';
-import 'package:installed_apps/app_info.dart';
-
-// Global cache for instant drawer loading
-List<AppInfo>? globalAppCache;
+import 'package:webview_flutter/webview_flutter.dart';
 
 class Workspace extends StatefulWidget {
   const Workspace({super.key});
@@ -19,24 +15,50 @@ class Workspace extends StatefulWidget {
 class _WorkspaceState extends State<Workspace> with SingleTickerProviderStateMixin {
   late PageController _pageController;
   late AnimationController _drawerController;
+  late Animation<double> _drawerAnimation;
   
   double _drawerHeight = 0.0;
   bool _isDrawerOpen = false;
   Map<String, int> _notifications = {};
   StreamSubscription<Map<String, int>>? _notificationSubscription;
+  late WebViewController _webViewController;
+  bool _isNewsLoading = true;
 
   @override
   void initState() {
     super.initState();
-    // Default to index 1 (HomeScreen). Index 0 is Google Discover trigger page.
+    // Default to index 1 (HomeScreen). Index 0 is News page.
     _pageController = PageController(initialPage: 1);
-    
-    // Pre-load apps for instant drawer
-    _preloadApps();
+
+    _webViewController = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onProgress: (int progress) {
+            if (mounted) {
+              setState(() {
+                _isNewsLoading = progress < 100;
+              });
+            }
+          },
+          onPageStarted: (String url) {
+            if (mounted) setState(() => _isNewsLoading = true);
+          },
+          onPageFinished: (String url) {
+            if (mounted) setState(() => _isNewsLoading = false);
+          },
+        ),
+      )
+      ..loadRequest(Uri.parse('https://www.msn.com/en-za'));
     
     _drawerController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 300),
+      duration: const Duration(milliseconds: 350),
+    );
+    _drawerAnimation = CurvedAnimation(
+      parent: _drawerController,
+      curve: Curves.easeOutCubic,
+      reverseCurve: Curves.easeInCubic,
     );
 
     // Listen to notification dots — guarded so a missing/denied
@@ -69,25 +91,8 @@ class _WorkspaceState extends State<Workspace> with SingleTickerProviderStateMix
   }
 
   void _onPageChanged(int index) {
-    if (index == 0) {
-      // Swiped left to Discover
-      LauncherService.openGoogleDiscover();
-      // Instantly reset to home screen so user doesn't get stuck on empty page
-      _pageController.jumpToPage(1);
-    }
-  }
-
-  Future<void> _preloadApps() async {
-    if (globalAppCache != null) return;
-    try {
-      final apps = await InstalledApps.getInstalledApps(
-        excludeSystemApps: false,
-        excludeNonLaunchableApps: true,
-        withIcon: true,
-      );
-      apps.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
-      globalAppCache = apps;
-    } catch (_) {}
+    // If we wanted to trigger an external intent, we'd do it here.
+    // Since we are using WebView at index 0, no action is needed.
   }
 
   void _openDrawer() {
@@ -140,8 +145,19 @@ class _WorkspaceState extends State<Workspace> with SingleTickerProviderStateMix
               onPageChanged: _onPageChanged,
               physics: _isDrawerOpen ? const NeverScrollableScrollPhysics() : const BouncingScrollPhysics(),
               children: [
-                // Google Discover page (transparent trigger)
-                Container(color: Colors.transparent),
+                // MSN News page (silent background loading)
+                Stack(
+                  children: [
+                    WebViewWidget(controller: _webViewController),
+                    if (_isNewsLoading)
+                      const Positioned(
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        child: LinearProgressIndicator(minHeight: 2),
+                      ),
+                  ],
+                ),
                 // Home Screen page
                 HomeScreen(
                   notifications: _notifications,
@@ -153,9 +169,9 @@ class _WorkspaceState extends State<Workspace> with SingleTickerProviderStateMix
 
           // Sliding App Drawer Overlay
           AnimatedBuilder(
-            animation: _drawerController,
+            animation: _drawerAnimation,
             builder: (context, child) {
-              final yOffset = _drawerHeight * (1.0 - _drawerController.value);
+              final yOffset = _drawerHeight * (1.0 - _drawerAnimation.value);
               return Positioned(
                 top: yOffset,
                 left: 0,

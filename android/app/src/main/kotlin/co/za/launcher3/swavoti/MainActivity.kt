@@ -12,6 +12,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterActivityLaunchConfigs
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.EventChannel
@@ -54,6 +55,10 @@ class MainActivity : FlutterActivity() {
         super.onDestroy()
     }
 
+    override fun getBackgroundMode(): FlutterActivityLaunchConfigs.BackgroundMode {
+        return FlutterActivityLaunchConfigs.BackgroundMode.transparent
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
@@ -65,25 +70,33 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, WIDGET_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "getAllWidgets" -> {
-                    val providers = appWidgetManager.installedProviders
                     val widgetList = mutableListOf<Map<String, Any>>()
-
-                    for (info in providers) {
-                        val map = mutableMapOf<String, Any>()
-                        map["providerPackage"] = info.provider.packageName
-                        map["providerClass"] = info.provider.className
-                        map["label"] = info.loadLabel(packageManager)
-                        
-                        val previewImage = info.loadPreviewImage(context, 0)
-                        val iconImage = info.loadIcon(context, 0)
-                        
-                        val drawableToConvert = previewImage ?: iconImage
-                        if (drawableToConvert != null) {
-                            val bytes = drawableToByteArray(drawableToConvert)
-                            map["preview"] = bytes
+                    try {
+                        val providers = appWidgetManager.installedProviders
+                        if (providers != null) {
+                            for (info in providers) {
+                                val map = mutableMapOf<String, Any>()
+                                map["providerPackage"] = info.provider.packageName
+                                map["providerClass"] = info.provider.className
+                                map["label"] = info.loadLabel(packageManager) ?: "Widget"
+                                
+                                val previewImage = try { info.loadPreviewImage(context, 0) } catch (e: Exception) { null }
+                                val iconImage = try { info.loadIcon(context, 0) } catch (e: Exception) { null }
+                                
+                                val drawableToConvert = previewImage ?: iconImage
+                                if (drawableToConvert != null) {
+                                    try {
+                                        val bytes = drawableToByteArray(drawableToConvert)
+                                        map["preview"] = bytes
+                                    } catch (e: Exception) {
+                                        // Ignore preview if drawable conversion fails
+                                    }
+                                }
+                                widgetList.add(map)
+                            }
                         }
-                        
-                        widgetList.add(map)
+                    } catch (e: Exception) {
+                        // Return empty list if installedProviders query fails
                     }
                     result.success(widgetList)
                 }
@@ -143,7 +156,16 @@ class MainActivity : FlutterActivity() {
                             val intent = packageManager.getLaunchIntentForPackage(packageName)
                             if (intent != null) {
                                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                startActivity(intent)
+                                val width = window.decorView.width
+                                val height = window.decorView.height
+                                val options = android.app.ActivityOptions.makeScaleUpAnimation(
+                                    window.decorView,
+                                    width / 2,
+                                    height / 2,
+                                    0,
+                                    0
+                                )
+                                startActivity(intent, options.toBundle())
                                 result.success(true)
                             } else {
                                 result.success(false)

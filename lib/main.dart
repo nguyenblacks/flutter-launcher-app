@@ -44,16 +44,49 @@ class SwavotiApp extends StatelessWidget {
           title: 'Swavoti Launcher',
           theme: ThemeData(
             colorScheme: lightColorScheme,
+            scaffoldBackgroundColor: Colors.transparent,
             useMaterial3: true,
+            pageTransitionsTheme: const PageTransitionsTheme(
+              builders: {
+                TargetPlatform.android: FadePageTransitionsBuilder(),
+                TargetPlatform.iOS: FadePageTransitionsBuilder(),
+              },
+            ),
           ),
+          themeMode: ThemeMode.system,
           darkTheme: ThemeData(
             colorScheme: darkColorScheme,
+            scaffoldBackgroundColor: Colors.transparent,
             useMaterial3: true,
+            pageTransitionsTheme: const PageTransitionsTheme(
+              builders: {
+                TargetPlatform.android: FadePageTransitionsBuilder(),
+                TargetPlatform.iOS: FadePageTransitionsBuilder(),
+              },
+            ),
           ),
           home: const Workspace(),
           debugShowCheckedModeBanner: false,
         );
       },
+    );
+  }
+}
+
+class FadePageTransitionsBuilder extends PageTransitionsBuilder {
+  const FadePageTransitionsBuilder();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    return FadeTransition(
+      opacity: animation,
+      child: child,
     );
   }
 }

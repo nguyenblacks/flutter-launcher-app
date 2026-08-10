@@ -9,8 +9,8 @@ class WeatherData {
 }
 
 class WeatherService {
-  // Free IP geolocation API
-  static const _ipApiUrl = 'http://ip-api.com/json/';
+  // Free IP geolocation API (HTTPS enabled)
+  static const _ipApiUrl = 'https://ipinfo.io/json';
   
   // Open-Meteo API (requires no API key)
   static const _weatherApiUrl = 'https://api.open-meteo.com/v1/forecast';
@@ -22,8 +22,14 @@ class WeatherService {
       if (locationResponse.statusCode != 200) return null;
 
       final locationData = jsonDecode(locationResponse.body);
-      final double? lat = locationData['lat'];
-      final double? lon = locationData['lon'];
+      final String? loc = locationData['loc'];
+      if (loc == null) return null;
+
+      final parts = loc.split(',');
+      if (parts.length != 2) return null;
+
+      final double? lat = double.tryParse(parts[0]);
+      final double? lon = double.tryParse(parts[1]);
 
       if (lat == null || lon == null) return null;
 

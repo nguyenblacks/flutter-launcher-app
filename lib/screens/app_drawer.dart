@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:installed_apps/installed_apps.dart';
 import 'package:installed_apps/app_info.dart';
 import 'package:swavoti/services/launcher_service.dart';
-import 'package:swavoti/screens/workspace.dart'; // For globalAppCache
+import 'package:swavoti/services/app_database_service.dart';
 
 class AppDrawer extends StatefulWidget {
   final Map<String, int> notifications;
@@ -52,32 +52,35 @@ class _AppDrawerState extends State<AppDrawer> {
   }
 
   Future<void> _loadApps() async {
-    if (globalAppCache != null && globalAppCache!.isNotEmpty) {
+    // 1. Instantly load from local SQLite cache
+    final cachedApps = await AppDatabaseService.getAllApps();
+    if (cachedApps.isNotEmpty) {
       if (mounted) {
         setState(() {
-          _apps = globalAppCache!;
-          _filteredApps = globalAppCache!;
+          _apps = cachedApps;
+          _filteredApps = cachedApps;
           _isLoading = false;
         });
       }
-      return;
     }
-    
-    // Fallback if cache is empty
-    final apps = await InstalledApps.getInstalledApps(
-      excludeSystemApps: false,
-      excludeNonLaunchableApps: true,
-      withIcon: true,
-    );
-    apps.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
-    if (mounted) {
+    // 2. Silently sync in background to catch new installs/uninstalls
+    final freshApps = await AppDatabaseService.syncAppsBackground();
+    if (freshApps.isNotEmpty && mounted) {
       setState(() {
-        _apps = apps;
-        _filteredApps = apps;
+        _apps = freshApps;
+        // Re-apply filter if user was searching
+        final query = _searchController.text.toLowerCase();
+        _filteredApps = _apps
+            .where((app) => app.name.toLowerCase().contains(query))
+            .toList();
         _isLoading = false;
       });
-      globalAppCache = apps;
+    } else if (cachedApps.isEmpty && mounted) {
+      // Edge case: no apps in cache and sync returned empty
+      setState(() {
+        _isLoading = false;
+      });
     }
   }
 
@@ -151,25 +154,11 @@ class _AppDrawerState extends State<AppDrawer> {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface.withOpacity(0.95),
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        color: Colors.black.withOpacity(0.9),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      padding: const EdgeInsets.fromLTRB(16, 40, 16, 16),
       child: Column(
         children: [
-          // Drawer handle
-          GestureDetector(
-            onTap: widget.onClose,
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.4),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
           // Search box
           TextField(
             controller: _searchController,
@@ -183,7 +172,7 @@ class _AppDrawerState extends State<AppDrawer> {
                     )
                   : null,
               filled: true,
-              fillColor: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.5),
+              fillColor: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.5),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(28),
                 borderSide: BorderSide.none,
@@ -193,7 +182,7 @@ class _AppDrawerState extends State<AppDrawer> {
           const SizedBox(height: 16),
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? const SizedBox.shrink() // Show blank while loading apps
                 : _filteredApps.isEmpty
                     ? const Center(child: Text('No apps found.'))
                     : NotificationListener<ScrollUpdateNotification>(

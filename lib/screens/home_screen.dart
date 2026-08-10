@@ -11,6 +11,7 @@ import 'package:swavoti/screens/home_settings.dart';
 import 'package:swavoti/services/weather_service.dart';
 import 'package:swavoti/widgets/weather_icon.dart';
 import 'package:swavoti/screens/workspace.dart';
+import 'package:swavoti/services/app_database_service.dart';
 import 'dart:async';
 
 class LauncherItem {
@@ -115,14 +116,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadDockApps() async {
-    // Wait a bit for globalAppCache to populate
-    while (globalAppCache == null && mounted) {
-      await Future.delayed(const Duration(milliseconds: 100));
+    List<AppInfo> apps = await AppDatabaseService.getAllApps();
+    if (apps.isEmpty) {
+      apps = await AppDatabaseService.syncAppsBackground();
     }
-    if (!mounted || globalAppCache == null) return;
+    if (!mounted || apps.isEmpty) return;
     
-    // Pick first 4 apps for the dock (or specific ones if available)
-    final apps = globalAppCache!;
     final dockApps = <AppInfo>[];
     
     // Try to find common apps
@@ -168,7 +167,7 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (context) {
         return Container(
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.95),
+            color: Theme.of(context).colorScheme.surface.withOpacity(0.95),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           ),
           padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
@@ -179,7 +178,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+                  color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.4),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -387,16 +386,32 @@ class _HomeScreenState extends State<HomeScreen> {
                               width: cellWidth,
                               height: cellHeight,
                               child: DragTarget<Map<String, dynamic>>(
-                                onWillAccept: (data) => true,
-                                onAccept: (data) {
-                                  if (data['type'] == 'app') {
+                                onWillAcceptWithDetails: (details) => true,
+                                onAcceptWithDetails: (details) {
+                                  final data = details.data;
+                                  final spanX = data['spanX'] as int? ?? 1;
+                                  final spanY = data['spanY'] as int? ?? 1;
+                                  final targetX = x.clamp(0, _columns - spanX);
+                                  final targetY = y.clamp(0, _rows - spanY);
+
+                                  if (data['id'] != null) {
+                                    // Move existing item
+                                    final itemId = data['id'] as String;
+                                    setState(() {
+                                      final item = _items.firstWhere((i) => i.id == itemId);
+                                      item.x = targetX;
+                                      item.y = targetY;
+                                    });
+                                    _saveItems();
+                                  } else if (data['type'] == 'app') {
+                                    // Add new app
                                     _addNewItem(LauncherItem(
                                       id: DateTime.now().millisecondsSinceEpoch.toString(),
                                       type: 'app',
                                       packageName: data['packageName'],
                                       label: data['label'],
-                                      x: x,
-                                      y: y,
+                                      x: targetX,
+                                      y: targetY,
                                     ));
                                   }
                                 },
@@ -406,7 +421,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     decoration: BoxDecoration(
                                       border: Border.all(
                                         color: candidateData.isNotEmpty
-                                            ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.5)
+                                            ? Theme.of(context).colorScheme.primary.withOpacity(0.5)
                                             : Colors.transparent,
                                         width: 2,
                                       ),
@@ -424,8 +439,8 @@ class _HomeScreenState extends State<HomeScreen> {
                             top: item.y * cellHeight,
                             width: item.spanX * cellWidth,
                             height: item.spanY * cellHeight,
-                            child: LongPressDraggable<LauncherItem>(
-                              data: item,
+                            child: LongPressDraggable<Map<String, dynamic>>(
+                              data: item.toJson(),
                               feedback: Material(
                                 color: Colors.transparent,
                                 child: Opacity(
@@ -434,18 +449,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                               ),
                               childWhenDragging: const SizedBox.shrink(),
-                              onDragEnd: (details) {
-                                // Simple repositioning logic on drop
-                                final RenderBox renderBox = context.findRenderObject() as RenderBox;
-                                final localOffset = renderBox.globalToLocal(details.offset);
-                                final newX = (localOffset.dx / cellWidth).round().clamp(0, _columns - item.spanX);
-                                final newY = (localOffset.dy / cellHeight).round().clamp(0, _rows - item.spanY);
-                                setState(() {
-                                  item.x = newX;
-                                  item.y = newY;
-                                });
-                                _saveItems();
-                              },
                               child: GestureDetector(
                                 onLongPress: () => _showItemContextMenu(item),
                                 child: _buildItemContent(item, cellWidth, cellHeight),
@@ -471,10 +474,6 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
                 margin: const EdgeInsets.only(bottom: 16, left: 16, right: 16),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(32),
-                ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: _dockApps.isEmpty 
