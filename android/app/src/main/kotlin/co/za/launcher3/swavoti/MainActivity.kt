@@ -37,12 +37,18 @@ class MainActivity : FlutterActivity() {
         super.onCreate(savedInstanceState)
         appWidgetManager = AppWidgetManager.getInstance(this)
         appWidgetHost = AppWidgetHost(this, APPWIDGET_HOST_ID)
-        appWidgetHost.startListening()
+        try {
+            appWidgetHost.startListening()
+        } catch (e: Exception) {
+            // AppWidgetHost unavailable on this device — widgets won't work but app won't crash
+        }
     }
 
     override fun onDestroy() {
+        try {
+            appWidgetHost.stopListening()
+        } catch (e: Exception) { /* ignore */ }
         super.onDestroy()
-        appWidgetHost.stopListening()
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {

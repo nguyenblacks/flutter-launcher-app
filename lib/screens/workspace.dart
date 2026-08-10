@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:swavoti/services/launcher_service.dart';
 import 'package:swavoti/screens/home_screen.dart';
@@ -17,6 +18,7 @@ class _WorkspaceState extends State<Workspace> with SingleTickerProviderStateMix
   double _drawerHeight = 0.0;
   bool _isDrawerOpen = false;
   Map<String, int> _notifications = {};
+  StreamSubscription<Map<String, int>>? _notificationSubscription;
 
   @override
   void initState() {
@@ -29,18 +31,30 @@ class _WorkspaceState extends State<Workspace> with SingleTickerProviderStateMix
       duration: const Duration(milliseconds: 300),
     );
 
-    // Listen to notification dots
-    LauncherService.notificationsStream.listen((data) {
-      if (mounted) {
-        setState(() {
-          _notifications = data;
-        });
-      }
-    });
+    // Listen to notification dots — guarded so a missing/denied
+    // NotificationListenerService permission does NOT crash the app.
+    try {
+      _notificationSubscription = LauncherService.notificationsStream.listen(
+        (data) {
+          if (mounted) {
+            setState(() {
+              _notifications = data;
+            });
+          }
+        },
+        onError: (e) {
+          // Permission not granted or service unavailable — silently ignore.
+        },
+        cancelOnError: false,
+      );
+    } catch (_) {
+      // Stream setup failed (e.g. service not bound) — dots just won't show.
+    }
   }
 
   @override
   void dispose() {
+    _notificationSubscription?.cancel();
     _pageController.dispose();
     _drawerController.dispose();
     super.dispose();
