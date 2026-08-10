@@ -10,8 +10,12 @@ class NotificationDotService : NotificationListenerService() {
     }
 
     override fun onListenerConnected() {
-        super.onListenerConnected()
-        updateNotifications()
+        try {
+            super.onListenerConnected()
+            updateNotifications()
+        } catch (e: Exception) {
+            // Service not ready yet — ignore
+        }
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {

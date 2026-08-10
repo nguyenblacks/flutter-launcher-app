@@ -34,9 +34,12 @@ class MainActivity : FlutterActivity() {
     private var pendingWidgetMethodResult: MethodChannel.Result? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
+        // MUST initialize before super.onCreate() because Flutter calls
+        // configureFlutterEngine() synchronously inside super.onCreate(),
+        // and configureFlutterEngine() references appWidgetHost.
         appWidgetManager = AppWidgetManager.getInstance(this)
         appWidgetHost = AppWidgetHost(this, APPWIDGET_HOST_ID)
+        super.onCreate(savedInstanceState)
         try {
             appWidgetHost.startListening()
         } catch (e: Exception) {
