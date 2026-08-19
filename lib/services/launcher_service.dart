@@ -1,4 +1,5 @@
 import 'package:flutter/services.dart';
+import 'dart:typed_data';
 
 class LauncherService {
   static const _systemChannel = MethodChannel('co.za.launcher3.swavoti/system');
@@ -35,6 +36,19 @@ class LauncherService {
       await _systemChannel.invokeMethod('changeWallpaper');
     } catch (e) {
       print('Error changing wallpaper: $e');
+    }
+  }
+
+  static Future<bool> setWallpaper(Uint8List imageBytes, int type) async {
+    try {
+      final bool? success = await _systemChannel.invokeMethod('setWallpaper', {
+        'bytes': imageBytes,
+        'type': type,
+      });
+      return success ?? false;
+    } catch (e) {
+      print('Error setting wallpaper: $e');
+      return false;
     }
   }
 

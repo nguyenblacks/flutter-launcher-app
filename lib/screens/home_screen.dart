@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:swavoti/services/launcher_service.dart';
 import 'package:swavoti/screens/widget_bottomsheet.dart';
 import 'package:swavoti/screens/home_settings.dart';
+import 'package:swavoti/screens/wallpaper_page.dart';
 import 'package:swavoti/services/weather_service.dart';
 import 'package:swavoti/widgets/weather_icon.dart';
 import 'package:swavoti/screens/workspace.dart';
@@ -204,7 +205,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     label: 'Wallpaper',
                     onTap: () {
                       Navigator.pop(context);
-                      LauncherService.changeWallpaper();
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const WallpaperPage()),
+                      );
                     },
                   ),
                   _buildMenuButton(

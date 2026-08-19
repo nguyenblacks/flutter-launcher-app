@@ -191,6 +191,25 @@ class MainActivity : FlutterActivity() {
                     startActivity(Intent.createChooser(intent, "Select Wallpaper"))
                     result.success(null)
                 }
+                "setWallpaper" -> {
+                    val bytes = call.argument<ByteArray>("bytes")
+                    val type = call.argument<Int>("type") ?: 3
+                    if (bytes != null) {
+                        try {
+                            val bitmap = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                            val wm = android.app.WallpaperManager.getInstance(context)
+                            var flags = 0
+                            if (type == 1 || type == 3) flags = flags or android.app.WallpaperManager.FLAG_SYSTEM
+                            if (type == 2 || type == 3) flags = flags or android.app.WallpaperManager.FLAG_LOCK
+                            wm.setBitmap(bitmap, null, true, flags)
+                            result.success(true)
+                        } catch (e: Exception) {
+                            result.success(false)
+                        }
+                    } else {
+                        result.success(false)
+                    }
+                }
                 "openGoogleDiscover" -> {
                     try {
                         val intent = Intent(Intent.ACTION_MAIN)
