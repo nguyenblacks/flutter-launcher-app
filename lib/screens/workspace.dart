@@ -20,10 +20,12 @@ class _WorkspaceState extends State<Workspace> with SingleTickerProviderStateMix
   
   double _drawerHeight = 0.0;
   bool _isDrawerOpen = false;
+  int _currentPage = 1;
   Map<String, int> _notifications = {};
   StreamSubscription<Map<String, int>>? _notificationSubscription;
   late WebViewController _webViewController;
   bool _isNewsLoading = true;
+  bool _hasWebError = false;
 
   @override
   void initState() {
@@ -43,10 +45,19 @@ class _WorkspaceState extends State<Workspace> with SingleTickerProviderStateMix
             }
           },
           onPageStarted: (String url) {
-            if (mounted) setState(() => _isNewsLoading = true);
+            if (mounted) setState(() { 
+              _isNewsLoading = true; 
+              _hasWebError = false; 
+            });
           },
           onPageFinished: (String url) {
             if (mounted) setState(() => _isNewsLoading = false);
+          },
+          onWebResourceError: (WebResourceError error) {
+            if (mounted) setState(() {
+              _isNewsLoading = false;
+              _hasWebError = true;
+            });
           },
         ),
       );
@@ -55,13 +66,22 @@ class _WorkspaceState extends State<Workspace> with SingleTickerProviderStateMix
     
     _drawerController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 350),
+      duration: const Duration(milliseconds: 400),
     );
     _drawerAnimation = CurvedAnimation(
       parent: _drawerController,
-      curve: Curves.easeOutCubic,
+      curve: Curves.easeOutExpo,
       reverseCurve: Curves.easeInCubic,
     );
+    _drawerController.addStatusListener((status) {
+      if (status == AnimationStatus.forward ||
+          status == AnimationStatus.completed) {
+        if (!_isDrawerOpen && mounted) setState(() => _isDrawerOpen = true);
+      } else if (status == AnimationStatus.reverse ||
+          status == AnimationStatus.dismissed) {
+        if (_isDrawerOpen && mounted) setState(() => _isDrawerOpen = false);
+      }
+    });
 
     // Listen to notification dots — guarded so a missing/denied
     // NotificationListenerService permission does NOT crash the app.
@@ -102,38 +122,49 @@ class _WorkspaceState extends State<Workspace> with SingleTickerProviderStateMix
   }
 
   void _onPageChanged(int index) {
-    // If we wanted to trigger an external intent, we'd do it here.
-    // Since we are using WebView at index 0, no action is needed.
+    setState(() => _currentPage = index);
   }
 
   void _openDrawer() {
-    _drawerController.forward();
-    setState(() {
-      _isDrawerOpen = true;
-    });
+    setState(() => _isDrawerOpen = true);
+    _drawerController.animateTo(1.0,
+        duration: const Duration(milliseconds: 380),
+        curve: Curves.easeOutExpo);
   }
 
   void _closeDrawer() {
-    _drawerController.reverse();
-    setState(() {
-      _isDrawerOpen = false;
+    _drawerController.animateTo(0.0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInCubic).then((_) {
+      if (mounted) setState(() => _isDrawerOpen = false);
     });
   }
 
   void _handleVerticalDragUpdate(DragUpdateDetails details) {
-    _drawerController.value -= details.primaryDelta! / _drawerHeight;
+    // Only handle upward drag to open, downward to close
+    final delta = -(details.primaryDelta! / _drawerHeight);
+    _drawerController.value = (_drawerController.value + delta).clamp(0.0, 1.0);
   }
 
   void _handleVerticalDragEnd(DragEndDetails details) {
     final velocity = details.primaryVelocity ?? 0;
-    if (velocity < -300) {
-      _openDrawer();
-    } else if (velocity > 300) {
-      _closeDrawer();
-    } else if (_drawerController.value > 0.5) {
-      _openDrawer();
+    // Use physics-based fling like AOSP Launcher3
+    if (velocity < -500 || (_drawerController.value > 0.3 && velocity <= 0)) {
+      // Fast upward fling or past threshold -> open
+      _drawerController.fling(velocity: 2.0);
+      setState(() => _isDrawerOpen = true);
+    } else if (velocity > 500 || (_drawerController.value < 0.7 && velocity >= 0)) {
+      // Fast downward fling or below threshold -> close
+      _drawerController.fling(velocity: -2.0).then((_) {
+        if (mounted) setState(() => _isDrawerOpen = false);
+      });
     } else {
-      _closeDrawer();
+      // Snap based on position
+      if (_drawerController.value > 0.5) {
+        _openDrawer();
+      } else {
+        _closeDrawer();
+      }
     }
   }
 
@@ -146,35 +177,61 @@ class _WorkspaceState extends State<Workspace> with SingleTickerProviderStateMix
       body: Stack(
         children: [
           // Background PageView (Discover Placeholder & HomeScreen)
-          GestureDetector(
-            onVerticalDragUpdate: _handleVerticalDragUpdate,
-            onVerticalDragEnd: _handleVerticalDragEnd,
-            child: PageView(
-              controller: _pageController,
-              onPageChanged: _onPageChanged,
-              physics: _isDrawerOpen ? const NeverScrollableScrollPhysics() : const BouncingScrollPhysics(),
-              children: [
-                // MSN News page (silent background loading)
-                Stack(
-                  children: [
-                    WebViewWidget(controller: _webViewController),
-                    if (_isNewsLoading)
-                      const Positioned(
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        child: LinearProgressIndicator(minHeight: 2),
+          PageView(
+            controller: _pageController,
+            onPageChanged: _onPageChanged,
+            physics: _isDrawerOpen ? const NeverScrollableScrollPhysics() : const BouncingScrollPhysics(),
+            children: [
+              // MSN News page (silent background loading or error)
+              Stack(
+                children: [
+                  if (_hasWebError)
+                    Container(
+                      color: Theme.of(context).colorScheme.surface,
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.wifi_off, size: 64, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                            const SizedBox(height: 16),
+                            const Text('No Internet Connection', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 16),
+                            ElevatedButton(
+                              onPressed: () {
+                                setState(() => _hasWebError = false);
+                                _webViewController.reload();
+                              },
+                              child: const Text('Retry'),
+                            ),
+                          ],
+                        ),
                       ),
-                  ],
-                ),
-                // Home Screen page
-                HomeScreen(
+                    )
+                  else
+                    WebViewWidget(controller: _webViewController),
+                  if (_isNewsLoading && !_hasWebError)
+                    const Positioned(
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      child: LinearProgressIndicator(minHeight: 2),
+                    ),
+                ],
+              ),
+              // Home Screen page — wrap in GestureDetector only here
+              GestureDetector(
+                onVerticalDragUpdate: _handleVerticalDragUpdate,
+                onVerticalDragEnd: _handleVerticalDragEnd,
+                child: HomeScreen(
                   notifications: _notifications,
                   onOpenDrawer: _openDrawer,
                   onSettingsChanged: _loadFeedProvider,
+                  onAddAppToHomeScreen: (data) {
+                    // HomeScreen handles this directly, just a pass-through
+                  },
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
 
           // Sliding App Drawer Overlay
@@ -193,6 +250,10 @@ class _WorkspaceState extends State<Workspace> with SingleTickerProviderStateMix
             child: AppDrawer(
               notifications: _notifications,
               onClose: _closeDrawer,
+              onAddToHomeScreen: (data) {
+                // Close drawer, HomeScreen listens for drops
+                _closeDrawer();
+              },
             ),
           ),
         ],

@@ -25,9 +25,13 @@ class _WallpaperPageState extends State<WallpaperPage> {
       final manifestContent = await rootBundle.loadString('AssetManifest.json');
       final Map<String, dynamic> manifestMap = json.decode(manifestContent);
       final imagePaths = manifestMap.keys
-          .where((String key) => key.startsWith('assets/wallpapers/') && key.endsWith('.jpg'))
-          .toList();
-      
+          .where((String key) =>
+              key.startsWith('assets/wallpapers/') &&
+              (key.endsWith('.jpg') || key.endsWith('.jpeg') ||
+               key.endsWith('.png') || key.endsWith('.webp')))
+          .toList()
+          ..sort(); // consistent order
+
       if (mounted) {
         setState(() {
           _wallpapers = imagePaths;
@@ -98,6 +102,7 @@ class _WallpaperPageState extends State<WallpaperPage> {
                           child: Image.asset(
                             path,
                             fit: BoxFit.cover,
+                            cacheWidth: 300, // Important: heavily reduces memory & decoding time
                           ),
                         ),
                       );
@@ -199,7 +204,18 @@ class _WallpaperPageState extends State<WallpaperPage> {
         elevation: 0,
       ),
       body: _wallpapers.isEmpty
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(
+              child: _wallpapers.isEmpty
+                  ? Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const CircularProgressIndicator(),
+                        const SizedBox(height: 16),
+                        Text('Loading wallpapers...', style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
+                      ],
+                    )
+                  : const Text('No wallpapers found in assets/wallpapers/'),
+            )
           : Column(
               children: [
                 const SizedBox(height: 32),

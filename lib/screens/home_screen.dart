@@ -25,6 +25,7 @@ class LauncherItem {
   int y;
   int spanX;
   int spanY;
+  int page;
   final String label;
 
   LauncherItem({
@@ -37,6 +38,7 @@ class LauncherItem {
     required this.y,
     this.spanX = 1,
     this.spanY = 1,
+    this.page = 0,
     required this.label,
   });
 
@@ -50,6 +52,7 @@ class LauncherItem {
         'y': y,
         'spanX': spanX,
         'spanY': spanY,
+        'page': page,
         'label': label,
       };
 
@@ -63,6 +66,7 @@ class LauncherItem {
         y: json['y'],
         spanX: json['spanX'] ?? 1,
         spanY: json['spanY'] ?? 1,
+        page: json['page'] ?? 0,
         label: json['label'] ?? '',
       );
 }
@@ -71,12 +75,14 @@ class HomeScreen extends StatefulWidget {
   final Map<String, int> notifications;
   final VoidCallback onOpenDrawer;
   final VoidCallback onSettingsChanged;
+  final void Function(Map<String, dynamic>)? onAddAppToHomeScreen;
 
   const HomeScreen({
     super.key,
     required this.notifications,
     required this.onOpenDrawer,
     required this.onSettingsChanged,
+    this.onAddAppToHomeScreen,
   });
 
   @override
@@ -90,10 +96,13 @@ class _HomeScreenState extends State<HomeScreen> {
   late Timer _timer;
   DateTime _currentTime = DateTime.now();
   bool _showTimeWeather = true;
+  bool _isDragging = false; // tracks active drag for remove zone
 
   // Grid Configuration
   final int _columns = 4;
   final int _rows = 5;
+  int _currentWorkspacePage = 0;
+  final PageController _workspaceController = PageController();
 
   @override
   void initState() {
@@ -110,6 +119,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _timer.cancel();
+    _workspaceController.dispose();
     super.dispose();
   }
 
@@ -329,7 +339,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final statusBarHeight = MediaQuery.of(context).padding.top;
 
     return GestureDetector(
-      onLongPress: _showWorkspaceMenu,
+      onLongPress: _openWidgetsSheet, // long press empty space opens widget sheet directly
       child: Container(
         color: Colors.transparent, // Capture taps across screen
         child: Column(
@@ -365,9 +375,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
                   child: Row(
-                    mainAxisAlignment: MainAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
+                      // Left: Time & Date
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -389,21 +400,29 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ],
                       ),
+                      // Right: small weather info, tappable
                       if (_weatherData != null)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 16.0),
-                          child: Row(
+                        GestureDetector(
+                          onTap: () {
+                            LauncherService.launchGoogleWeather();
+                          },
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
+                              WeatherIcon(
+                                weatherCode: _weatherData!.weatherCode,
+                                size: 32,
+                                isNight: _currentTime.hour < 6 || _currentTime.hour >= 20,
+                              ),
+                              const SizedBox(height: 4),
                               Text(
                                 '${_weatherData!.temperature.round()}°',
                                 style: TextStyle(
                                   color: Theme.of(context).colorScheme.onSurface,
-                                  fontSize: 36,
-                                  fontWeight: FontWeight.w400,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w500,
                                 ),
                               ),
-                              const SizedBox(width: 8),
-                              WeatherIcon(weatherCode: _weatherData!.weatherCode, size: 56),
                             ],
                           ),
                         ),
@@ -412,6 +431,25 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             const SizedBox(height: 16),
+            
+            // Workspace Page Indicator
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(3, (index) {
+                return Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: _currentWorkspacePage == index
+                        ? Theme.of(context).colorScheme.primary
+                        : Theme.of(context).colorScheme.onSurface.withOpacity(0.3),
+                  ),
+                );
+              }),
+            ),
+            const SizedBox(height: 8),
 
             // Workspace Grid (Apps & Widgets)
             Expanded(
@@ -422,119 +460,184 @@ class _HomeScreenState extends State<HomeScreen> {
                     final cellWidth = constraints.maxWidth / _columns;
                     final cellHeight = constraints.maxHeight / _rows;
 
-                    return Stack(
-                      children: [
-                        // Grid lines or drag targets
-                        for (int y = 0; y < _rows; y++)
-                          for (int x = 0; x < _columns; x++)
-                            Positioned(
-                              left: x * cellWidth,
-                              top: y * cellHeight,
-                              width: cellWidth,
-                              height: cellHeight,
-                              child: DragTarget<Map<String, dynamic>>(
-                                onWillAcceptWithDetails: (details) => true,
-                                onAcceptWithDetails: (details) {
-                                  final data = details.data;
-                                  final spanX = data['spanX'] as int? ?? 1;
-                                  final spanY = data['spanY'] as int? ?? 1;
-                                  final targetX = x.clamp(0, _columns - spanX);
-                                  final targetY = y.clamp(0, _rows - spanY);
+                    return PageView.builder(
+                      controller: _workspaceController,
+                      itemCount: 3, // Support 3 workspaces
+                      onPageChanged: (index) => setState(() => _currentWorkspacePage = index),
+                      itemBuilder: (context, pageIndex) {
+                        final pageItems = _items.where((i) => i.page == pageIndex).toList();
 
-                                  if (data['id'] != null) {
-                                    // Move existing item
-                                    final itemId = data['id'] as String;
-                                    setState(() {
-                                      final item = _items.firstWhere((i) => i.id == itemId);
-                                      item.x = targetX;
-                                      item.y = targetY;
-                                    });
-                                    _saveItems();
-                                  } else if (data['type'] == 'app') {
-                                    // Add new app
-                                    _addNewItem(LauncherItem(
-                                      id: DateTime.now().millisecondsSinceEpoch.toString(),
-                                      type: 'app',
-                                      packageName: data['packageName'],
-                                      label: data['label'],
-                                      x: targetX,
-                                      y: targetY,
-                                    ));
-                                  } else if (data['type'] == 'widget_preview') {
-                                    LauncherService.allocateWidgetId().then((id) {
-                                      if (id != -1) {
-                                        LauncherService.bindWidget(
-                                          id,
-                                          data['providerPackage'],
-                                          data['providerClass'],
-                                        ).then((success) {
-                                          if (success) {
-                                            _addNewItem(LauncherItem(
-                                              id: DateTime.now().millisecondsSinceEpoch.toString(),
-                                              type: 'widget',
-                                              packageName: data['providerPackage'],
-                                              className: data['providerClass'],
-                                              appWidgetId: id,
-                                              x: targetX,
-                                              y: targetY,
-                                              spanX: 4,
-                                              spanY: 2,
-                                              label: data['label'],
-                                            ));
+                        return Stack(
+                          children: [
+                            // Grid lines or drag targets
+                            for (int y = 0; y < _rows; y++)
+                              for (int x = 0; x < _columns; x++)
+                                Positioned(
+                                  left: x * cellWidth,
+                                  top: y * cellHeight,
+                                  width: cellWidth,
+                                  height: cellHeight,
+                                  child: DragTarget<Map<String, dynamic>>(
+                                    onWillAcceptWithDetails: (details) => true,
+                                    onAcceptWithDetails: (details) {
+                                      final data = details.data;
+                                      final spanX = data['spanX'] as int? ?? 1;
+                                      final spanY = data['spanY'] as int? ?? 1;
+                                      final targetX = x.clamp(0, _columns - spanX);
+                                      final targetY = y.clamp(0, _rows - spanY);
+
+                                      if (data['id'] != null) {
+                                        // Move existing item
+                                        final itemId = data['id'] as String;
+                                        setState(() {
+                                          final item = _items.firstWhere((i) => i.id == itemId);
+                                          item.x = targetX;
+                                          item.y = targetY;
+                                          item.page = pageIndex;
+                                        });
+                                        _saveItems();
+                                      } else if (data['type'] == 'app') {
+                                        // Add new app
+                                        _addNewItem(LauncherItem(
+                                          id: DateTime.now().millisecondsSinceEpoch.toString(),
+                                          type: 'app',
+                                          packageName: data['packageName'],
+                                          label: data['label'],
+                                          x: targetX,
+                                          y: targetY,
+                                          page: pageIndex,
+                                        ));
+                                      } else if (data['type'] == 'widget_preview') {
+                                        LauncherService.allocateWidgetId().then((id) {
+                                          if (id != -1) {
+                                            LauncherService.bindWidget(
+                                              id,
+                                              data['providerPackage'],
+                                              data['providerClass'],
+                                            ).then((success) {
+                                              if (success) {
+                                                _addNewItem(LauncherItem(
+                                                  id: DateTime.now().millisecondsSinceEpoch.toString(),
+                                                  type: 'widget',
+                                                  packageName: data['providerPackage'],
+                                                  className: data['providerClass'],
+                                                  appWidgetId: id,
+                                                  x: targetX,
+                                                  y: targetY,
+                                                  spanX: 4,
+                                                  spanY: 2,
+                                                  page: pageIndex,
+                                                  label: data['label'],
+                                                ));
+                                              }
+                                            });
                                           }
                                         });
                                       }
-                                    });
-                                  }
-                                },
-                                builder: (context, candidateData, rejectedData) {
-                                  return Container(
-                                    margin: const EdgeInsets.all(4),
-                                    decoration: BoxDecoration(
-                                      border: Border.all(
-                                        color: candidateData.isNotEmpty
-                                            ? Theme.of(context).colorScheme.primary.withOpacity(0.5)
-                                            : Colors.transparent,
-                                        width: 2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-
-                        // Placed Items
-                        ..._items.map((item) {
-                          return Positioned(
-                            left: item.x * cellWidth,
-                            top: item.y * cellHeight,
-                            width: item.spanX * cellWidth,
-                            height: item.spanY * cellHeight,
-                            child: LongPressDraggable<Map<String, dynamic>>(
-                              data: item.toJson(),
-                              delay: const Duration(milliseconds: 150),
-                              feedback: Material(
-                                color: Colors.transparent,
-                                child: Opacity(
-                                  opacity: 0.7,
-                                  child: _buildItemContent(item, cellWidth, cellHeight),
+                                    },
+                                    builder: (context, candidateData, rejectedData) {
+                                      return Container(
+                                        margin: const EdgeInsets.all(4),
+                                        decoration: BoxDecoration(
+                                          border: Border.all(
+                                            color: candidateData.isNotEmpty
+                                                ? Theme.of(context).colorScheme.primary.withOpacity(0.5)
+                                                : Colors.transparent,
+                                            width: 2,
+                                          ),
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                      );
+                                    },
+                                  ),
                                 ),
-                              ),
-                              childWhenDragging: const SizedBox.shrink(),
-                              child: GestureDetector(
-                                onLongPress: () => _showItemContextMenu(item),
-                                child: _buildItemContent(item, cellWidth, cellHeight),
-                              ),
-                            ),
-                          );
-                        }),
-                      ],
+
+                            // Placed Items on this page
+                            ...pageItems.map((item) {
+                              return Positioned(
+                                left: item.x * cellWidth,
+                                top: item.y * cellHeight,
+                                width: item.spanX * cellWidth,
+                                height: item.spanY * cellHeight,
+                                child: LongPressDraggable<Map<String, dynamic>>(
+                                  data: item.toJson(),
+                                  delay: const Duration(milliseconds: 150),
+                                  onDragStarted: () => setState(() => _isDragging = true),
+                                  onDragEnd: (_) => setState(() => _isDragging = false),
+                                  onDraggableCanceled: (_, __) => setState(() => _isDragging = false),
+                                  feedback: Material(
+                                    color: Colors.transparent,
+                                    child: Opacity(
+                                      opacity: 0.7,
+                                      child: _buildItemContent(item, cellWidth, cellHeight),
+                                    ),
+                                  ),
+                                  childWhenDragging: const SizedBox.shrink(),
+                                  child: GestureDetector(
+                                    onLongPress: () => _showItemContextMenu(item),
+                                    child: _buildItemContent(item, cellWidth, cellHeight),
+                                  ),
+                                ),
+                              );
+                            }),
+                          ],
+                        );
+                      },
                     );
                   },
                 ),
               ),
             ),
+
+            // Persistent Remove Zone — only visible while dragging
+            if (_isDragging)
+              DragTarget<Map<String, dynamic>>(
+                onAcceptWithDetails: (details) {
+                  final id = details.data['id'] as String?;
+                  if (id != null) {
+                    final item = _items.firstWhere((i) => i.id == id);
+                    _removeItem(item);
+                  }
+                  setState(() => _isDragging = false);
+                },
+                builder: (context, candidateData, rejectedData) {
+                  final isHovered = candidateData.isNotEmpty;
+                  return AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    margin: const EdgeInsets.symmetric(horizontal: 32, vertical: 8),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    decoration: BoxDecoration(
+                      color: isHovered
+                          ? Colors.red.withOpacity(0.85)
+                          : Colors.black.withOpacity(0.5),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(
+                        color: isHovered ? Colors.red : Colors.white54,
+                        width: 2,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.delete_outline,
+                          color: isHovered ? Colors.white : Colors.white70,
+                          size: 28,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Remove',
+                          style: TextStyle(
+                            color: isHovered ? Colors.white : Colors.white70,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
 
             // App Dock
             GestureDetector(
@@ -662,46 +765,69 @@ class _HomeScreenState extends State<HomeScreen> {
     showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: Text(item.label.isNotEmpty ? item.label : 'Item Actions'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.info_outline),
-                title: const Text('App Info'),
-                onTap: () {
-                  Navigator.pop(context);
-                  LauncherService.openAppInfo(item.packageName);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.delete_outline, color: Colors.red),
-                title: const Text('Remove from Home', style: TextStyle(color: Colors.red)),
-                onTap: () {
-                  Navigator.pop(context);
-                  _removeItem(item);
-                },
-              ),
-              if (item.type == 'widget')
+        return Dialog(
+          backgroundColor: Theme.of(context).colorScheme.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Text(
+                    item.label.isNotEmpty ? item.label : 'Item Actions',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+                const Divider(),
                 ListTile(
-                  leading: const Icon(Icons.aspect_ratio),
-                  title: const Text('Resize Widget'),
+                  leading: const Icon(Icons.delete_outline),
+                  title: const Text('Remove from Home'),
                   onTap: () {
                     Navigator.pop(context);
-                    _showResizeDialog(item);
+                    _removeItem(item);
                   },
                 ),
-              if (item.type == 'app')
-                ListTile(
-                  leading: const Icon(Icons.delete_forever, color: Colors.red),
-                  title: const Text('Uninstall App', style: TextStyle(color: Colors.red)),
-                  onTap: () {
-                    Navigator.pop(context);
-                    LauncherService.uninstallApp(item.packageName);
-                  },
-                ),
-            ],
+                if (item.type == 'app') ...[
+                  ListTile(
+                    leading: const Icon(Icons.share_outlined),
+                    title: const Text('Share App'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      LauncherService.shareApp(item.packageName);
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.info_outline),
+                    title: const Text('App Info'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      LauncherService.openAppInfo(item.packageName);
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.delete_forever, color: Colors.red),
+                    title: const Text('Uninstall', style: TextStyle(color: Colors.red)),
+                    onTap: () {
+                      Navigator.pop(context);
+                      LauncherService.uninstallApp(item.packageName);
+                    },
+                  ),
+                ],
+                if (item.type == 'widget') ...[
+                  ListTile(
+                    leading: const Icon(Icons.aspect_ratio),
+                    title: const Text('Resize Widget'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _showResizeDialog(item);
+                    },
+                  ),
+                ],
+              ],
+            ),
           ),
         );
       },
@@ -794,3 +920,4 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 }
+

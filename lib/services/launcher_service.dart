@@ -39,6 +39,22 @@ class LauncherService {
     }
   }
 
+  static Future<void> launchGoogleWeather() async {
+    try {
+      await _systemChannel.invokeMethod('launchGoogleWeather');
+    } catch (e) {
+      print('Error launching weather: $e');
+    }
+  }
+
+  static Future<void> shareApp(String packageName) async {
+    try {
+      await _systemChannel.invokeMethod('shareApp', {'packageName': packageName});
+    } catch (e) {
+      print('Error sharing app: $e');
+    }
+  }
+
   static Future<bool> setWallpaper(Uint8List imageBytes, int type) async {
     try {
       final bool? success = await _systemChannel.invokeMethod('setWallpaper', {

@@ -232,6 +232,49 @@ class MainActivity : FlutterActivity() {
                     } catch (e: Exception) {}
                     result.success(null)
                 }
+                "launchGoogleWeather" -> {
+                    try {
+                        // Method 1: Exported Activity
+                        val intent = Intent(Intent.ACTION_MAIN)
+                        intent.setClassName("com.google.android.googlequicksearchbox", "com.google.android.apps.search.weather.WeatherExportedActivity")
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        startActivity(intent)
+                    } catch (e: Exception) {
+                        try {
+                            // Method 2: Deep Link
+                            val intent2 = Intent(Intent.ACTION_VIEW)
+                            intent2.data = Uri.parse("dynact://velour/weather/ProxyActivity")
+                            intent2.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            startActivity(intent2)
+                        } catch (e2: Exception) {
+                            try {
+                                // Method 3: Deep Shortcut
+                                val intent3 = Intent(Intent.ACTION_MAIN)
+                                intent3.setPackage("com.google.android.googlequicksearchbox")
+                                intent3.putExtra("s.shortcut_id", "Weather")
+                                intent3.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                startActivity(intent3)
+                            } catch (e3: Exception) {
+                                // Fallback fails
+                            }
+                        }
+                    }
+                    result.success(null)
+                }
+                "shareApp" -> {
+                    val packageName = call.argument<String>("packageName")
+                    if (packageName != null) {
+                        val sendIntent: Intent = Intent().apply {
+                            action = Intent.ACTION_SEND
+                            putExtra(Intent.EXTRA_TEXT, "Check out this app: https://play.google.com/store/apps/details?id=$packageName")
+                            type = "text/plain"
+                        }
+                        val shareIntent = Intent.createChooser(sendIntent, null)
+                        shareIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        startActivity(shareIntent)
+                    }
+                    result.success(null)
+                }
                 else -> result.notImplemented()
             }
         }

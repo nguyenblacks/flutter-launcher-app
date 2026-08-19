@@ -4,11 +4,13 @@ import 'dart:math' as math;
 class WeatherIcon extends StatelessWidget {
   final int weatherCode;
   final double size;
+  final bool isNight;
 
   const WeatherIcon({
     super.key,
     required this.weatherCode,
     this.size = 64.0,
+    this.isNight = false,
   });
 
   @override
@@ -17,7 +19,7 @@ class WeatherIcon extends StatelessWidget {
       width: size,
       height: size,
       child: CustomPaint(
-        painter: WeatherIconPainter(weatherCode),
+        painter: WeatherIconPainter(weatherCode, isNight: isNight),
       ),
     );
   }
@@ -25,14 +27,19 @@ class WeatherIcon extends StatelessWidget {
 
 class WeatherIconPainter extends CustomPainter {
   final int code;
+  final bool isNight;
 
-  WeatherIconPainter(this.code);
+  WeatherIconPainter(this.code, {this.isNight = false});
 
   @override
   void paint(Canvas canvas, Size size) {
     // WMO Weather interpretation codes
     if (code == 0 || code == 1) {
-      _drawSun(canvas, size);
+      if (isNight) {
+        _drawMoon(canvas, size);
+      } else {
+        _drawSun(canvas, size);
+      }
       if (code == 1) _drawCloud(canvas, size, offset: const Offset(10, 10), scale: 0.7);
     } else if (code == 2 || code == 3) {
       _drawCloud(canvas, size, offset: const Offset(5, 5));
@@ -51,6 +58,24 @@ class WeatherIconPainter extends CustomPainter {
       _drawSun(canvas, size);
       _drawCloud(canvas, size, offset: const Offset(10, 10), scale: 0.7);
     }
+  }
+
+  void _drawMoon(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 3.2;
+    // Use saveLayer so BlendMode.clear carves the crescent correctly
+    canvas.saveLayer(Rect.fromLTWH(0, 0, size.width, size.height), Paint());
+    // Full moon
+    canvas.drawCircle(center, radius, Paint()
+      ..color = const Color(0xFFE8E060)
+      ..style = PaintingStyle.fill);
+    // Carve out crescent
+    canvas.drawCircle(
+      Offset(center.dx + radius * 0.5, center.dy - radius * 0.2),
+      radius * 0.82,
+      Paint()..blendMode = BlendMode.clear,
+    );
+    canvas.restore();
   }
 
   void _drawSun(Canvas canvas, Size size) {
