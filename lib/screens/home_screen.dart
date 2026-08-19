@@ -86,10 +86,10 @@ class HomeScreen extends StatefulWidget {
   });
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  State<HomeScreen> createState() => HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class HomeScreenState extends State<HomeScreen> {
   List<LauncherItem> _items = [];
   List<AppInfo> _dockApps = [];
   WeatherData? _weatherData;
@@ -103,6 +103,12 @@ class _HomeScreenState extends State<HomeScreen> {
   final int _rows = 5;
   int _currentWorkspacePage = 0;
   final PageController _workspaceController = PageController();
+
+  int get _totalPages {
+    if (_items.isEmpty) return 2;
+    int maxPage = _items.fold<int>(0, (max, item) => item.page > max ? item.page : max);
+    return maxPage + 2; // Always allow 1 extra empty page at the end
+  }
 
   @override
   void initState() {
@@ -297,19 +303,7 @@ class _HomeScreenState extends State<HomeScreen> {
               widgetData['providerClass'],
             );
             if (success) {
-              // Add to workspace at first available slot
-              _addNewItem(LauncherItem(
-                id: DateTime.now().millisecondsSinceEpoch.toString(),
-                type: 'widget',
-                packageName: widgetData['providerPackage'],
-                className: widgetData['providerClass'],
-                appWidgetId: id,
-                x: 0,
-                y: 2,
-                spanX: 4,
-                spanY: 2,
-                label: widgetData['label'],
-              ));
+              addWidgetToWorkspace(widgetData, id);
             }
           }
         },
@@ -334,12 +328,88 @@ class _HomeScreenState extends State<HomeScreen> {
     _saveItems();
   }
 
+  void addAppToWorkspace(String packageName, String label) {
+    // Find the first empty 1x1 slot on the current page
+    for (int y = 0; y < _rows; y++) {
+      for (int x = 0; x < _columns; x++) {
+        // Check if any item occupies (x, y) on _currentWorkspacePage
+        final isOccupied = _items.any((item) =>
+            item.page == _currentWorkspacePage &&
+            x >= item.x && x < item.x + item.spanX &&
+            y >= item.y && y < item.y + item.spanY);
+
+        if (!isOccupied) {
+          _addNewItem(LauncherItem(
+            id: DateTime.now().millisecondsSinceEpoch.toString(),
+            type: 'app',
+            packageName: packageName,
+            label: label,
+            x: x,
+            y: y,
+            page: _currentWorkspacePage,
+          ));
+          return;
+        }
+      }
+    }
+    // If no space, show a snackbar
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('No space left on this workspace page!')),
+    );
+  }
+
+  void addWidgetToWorkspace(Map<String, dynamic> widgetData, int widgetId) {
+    // Try to find a 4x2 space on the current page
+    final spanX = 4;
+    final spanY = 2;
+    
+    for (int y = 0; y <= _rows - spanY; y++) {
+      for (int x = 0; x <= _columns - spanX; x++) {
+        // Check if any item occupies any cell in this span
+        bool isOccupied = false;
+        for (final item in _items) {
+          if (item.page == _currentWorkspacePage) {
+            // Check overlap
+            if (x < item.x + item.spanX && x + spanX > item.x &&
+                y < item.y + item.spanY && y + spanY > item.y) {
+              isOccupied = true;
+              break;
+            }
+          }
+        }
+
+        if (!isOccupied) {
+          _addNewItem(LauncherItem(
+            id: DateTime.now().millisecondsSinceEpoch.toString(),
+            type: 'widget',
+            packageName: widgetData['providerPackage'],
+            className: widgetData['providerClass'],
+            appWidgetId: widgetId,
+            x: x,
+            y: y,
+            spanX: spanX,
+            spanY: spanY,
+            page: _currentWorkspacePage,
+            label: widgetData['label'],
+          ));
+          return;
+        }
+      }
+    }
+    
+    // If no space, we can't place it. Should probably delete the widget ID to prevent leaks.
+    LauncherService.deleteWidgetId(widgetId);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Not enough space for this widget (requires 4x2). Try a blank page!')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final statusBarHeight = MediaQuery.of(context).padding.top;
 
     return GestureDetector(
-      onLongPress: _openWidgetsSheet, // long press empty space opens widget sheet directly
+      onLongPress: _showWorkspaceMenu, // open workspace menu for wallpapers, widgets, settings
       child: Container(
         color: Colors.transparent, // Capture taps across screen
         child: Column(
@@ -430,26 +500,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ),
-            const SizedBox(height: 16),
-            
-            // Workspace Page Indicator
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(3, (index) {
-                return Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: _currentWorkspacePage == index
-                        ? Theme.of(context).colorScheme.primary
-                        : Theme.of(context).colorScheme.onSurface.withOpacity(0.3),
-                  ),
-                );
-              }),
-            ),
-            const SizedBox(height: 8),
+
 
             // Workspace Grid (Apps & Widgets)
             Expanded(
@@ -461,8 +512,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     final cellHeight = constraints.maxHeight / _rows;
 
                     return PageView.builder(
+                      physics: const ClampingScrollPhysics(), // Pass overscroll to parent (News page)
                       controller: _workspaceController,
-                      itemCount: 3, // Support 3 workspaces
+                      itemCount: _totalPages,
                       onPageChanged: (index) => setState(() => _currentWorkspacePage = index),
                       itemBuilder: (context, pageIndex) {
                         final pageItems = _items.where((i) => i.page == pageIndex).toList();
@@ -580,6 +632,42 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                               );
                             }),
+
+                            // Edge drag to previous page
+                            if (_isDragging && pageIndex > 0)
+                              Positioned(
+                                left: 0,
+                                top: 0,
+                                bottom: 0,
+                                width: 24,
+                                child: DragTarget<Map<String, dynamic>>(
+                                  onWillAcceptWithDetails: (_) {
+                                    _workspaceController.previousPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+                                    return false;
+                                  },
+                                  builder: (context, candidateData, _) {
+                                    return Container(color: candidateData.isNotEmpty ? Colors.white.withOpacity(0.2) : Colors.transparent);
+                                  },
+                                ),
+                              ),
+
+                            // Edge drag to next page
+                            if (_isDragging && pageIndex < _totalPages - 1)
+                              Positioned(
+                                right: 0,
+                                top: 0,
+                                bottom: 0,
+                                width: 24,
+                                child: DragTarget<Map<String, dynamic>>(
+                                  onWillAcceptWithDetails: (_) {
+                                    _workspaceController.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+                                    return false;
+                                  },
+                                  builder: (context, candidateData, _) {
+                                    return Container(color: candidateData.isNotEmpty ? Colors.white.withOpacity(0.2) : Colors.transparent);
+                                  },
+                                ),
+                              ),
                           ],
                         );
                       },
@@ -588,6 +676,26 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ),
+            
+            // Workspace Page Indicator (At bottom)
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(_totalPages, (index) {
+                return Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: _currentWorkspacePage == index
+                        ? Theme.of(context).colorScheme.primary
+                        : Theme.of(context).colorScheme.onSurface.withOpacity(0.3),
+                  ),
+                );
+              }),
+            ),
+            const SizedBox(height: 16),
 
             // Persistent Remove Zone — only visible while dragging
             if (_isDragging)

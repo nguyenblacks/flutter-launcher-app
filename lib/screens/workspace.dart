@@ -26,6 +26,8 @@ class _WorkspaceState extends State<Workspace> with SingleTickerProviderStateMix
   late WebViewController _webViewController;
   bool _isNewsLoading = true;
   bool _hasWebError = false;
+  
+  final GlobalKey<HomeScreenState> _homeScreenKey = GlobalKey<HomeScreenState>();
 
   @override
   void initState() {
@@ -223,12 +225,10 @@ class _WorkspaceState extends State<Workspace> with SingleTickerProviderStateMix
                 onVerticalDragUpdate: _handleVerticalDragUpdate,
                 onVerticalDragEnd: _handleVerticalDragEnd,
                 child: HomeScreen(
+                  key: _homeScreenKey,
                   notifications: _notifications,
                   onOpenDrawer: _openDrawer,
                   onSettingsChanged: _loadFeedProvider,
-                  onAddAppToHomeScreen: (data) {
-                    // HomeScreen handles this directly, just a pass-through
-                  },
                 ),
               ),
             ],
@@ -251,8 +251,13 @@ class _WorkspaceState extends State<Workspace> with SingleTickerProviderStateMix
               notifications: _notifications,
               onClose: _closeDrawer,
               onAddToHomeScreen: (data) {
-                // Close drawer, HomeScreen listens for drops
                 _closeDrawer();
+                if (data['type'] == 'app') {
+                  _homeScreenKey.currentState?.addAppToWorkspace(
+                    data['packageName'],
+                    data['label'],
+                  );
+                }
               },
             ),
           ),
