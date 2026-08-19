@@ -12,6 +12,8 @@ class HomeSettings extends StatefulWidget {
 class _HomeSettingsState extends State<HomeSettings> {
   bool _notificationDotsEnabled = false;
   bool _isLoading = true;
+  String _feedProvider = 'msn';
+  bool _showTimeWeather = true;
 
   @override
   void initState() {
@@ -24,6 +26,8 @@ class _HomeSettingsState extends State<HomeSettings> {
     if (mounted) {
       setState(() {
         _notificationDotsEnabled = prefs.getBool('notification_dots_enabled') ?? false;
+        _feedProvider = prefs.getString('feed_provider') ?? 'msn';
+        _showTimeWeather = prefs.getBool('show_time_weather') ?? true;
         _isLoading = false;
       });
     }
@@ -68,9 +72,52 @@ class _HomeSettingsState extends State<HomeSettings> {
     }
   }
 
+  Future<void> _toggleTimeWeather(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('show_time_weather', value);
+    setState(() => _showTimeWeather = value);
+  }
+
+  void _selectFeedProvider() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Select Feed Provider'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                title: const Text('MSN'),
+                trailing: _feedProvider == 'msn' ? const Icon(Icons.check) : null,
+                onTap: () async {
+                  final prefs = await SharedPreferences.getInstance();
+                  await prefs.setString('feed_provider', 'msn');
+                  setState(() => _feedProvider = 'msn');
+                  if (mounted) Navigator.pop(context);
+                },
+              ),
+              ListTile(
+                title: const Text('Yahoo'),
+                trailing: _feedProvider == 'yahoo' ? const Icon(Icons.check) : null,
+                onTap: () async {
+                  final prefs = await SharedPreferences.getInstance();
+                  await prefs.setString('feed_provider', 'yahoo');
+                  setState(() => _feedProvider = 'yahoo');
+                  if (mounted) Navigator.pop(context);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
         title: const Text('Home Settings'),
       ),
@@ -84,6 +131,20 @@ class _HomeSettingsState extends State<HomeSettings> {
                   value: _notificationDotsEnabled,
                   onChanged: _toggleNotificationDots,
                   secondary: const Icon(Icons.notification_important),
+                ),
+                SwitchListTile(
+                  title: const Text('Show Time & Weather'),
+                  subtitle: const Text('Display the time and weather widget on the home screen'),
+                  value: _showTimeWeather,
+                  onChanged: _toggleTimeWeather,
+                  secondary: const Icon(Icons.access_time),
+                ),
+                ListTile(
+                  title: const Text('Feed Provider'),
+                  subtitle: Text(_feedProvider.toUpperCase()),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                  onTap: _selectFeedProvider,
+                  leading: const Icon(Icons.article_outlined),
                 ),
                 const Divider(),
                 ListTile(

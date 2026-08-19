@@ -72,7 +72,14 @@ class _WidgetBottomSheetState extends State<WidgetBottomSheet> {
                           final pkg = widgetData['providerPackage'] as String? ?? '';
                           final previewBytes = widgetData['preview'] as Uint8List?;
 
-                          return Card(
+                          final dragData = {
+                            'type': 'widget_preview',
+                            'providerPackage': widgetData['providerPackage'],
+                            'providerClass': widgetData['providerClass'],
+                            'label': label,
+                          };
+
+                          final widgetCard = Card(
                             margin: const EdgeInsets.symmetric(vertical: 8),
                             child: ListTile(
                               contentPadding: const EdgeInsets.all(12),
@@ -95,6 +102,29 @@ class _WidgetBottomSheetState extends State<WidgetBottomSheet> {
                                 widget.onWidgetSelected(widgetData);
                               },
                             ),
+                          );
+
+                          return LongPressDraggable<Map<String, dynamic>>(
+                            data: dragData,
+                            delay: const Duration(milliseconds: 150),
+                            onDragStarted: () {
+                              Navigator.pop(context);
+                            },
+                            feedback: Material(
+                              color: Colors.transparent,
+                              child: Opacity(
+                                opacity: 0.8,
+                                child: SizedBox(
+                                  width: MediaQuery.of(context).size.width - 32,
+                                  child: widgetCard,
+                                ),
+                              ),
+                            ),
+                            childWhenDragging: Opacity(
+                              opacity: 0.3,
+                              child: widgetCard,
+                            ),
+                            child: widgetCard,
                           );
                         },
                       ),

@@ -4,6 +4,7 @@ import 'package:swavoti/services/launcher_service.dart';
 import 'package:swavoti/screens/home_screen.dart';
 import 'package:swavoti/screens/app_drawer.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class Workspace extends StatefulWidget {
   const Workspace({super.key});
@@ -48,8 +49,9 @@ class _WorkspaceState extends State<Workspace> with SingleTickerProviderStateMix
             if (mounted) setState(() => _isNewsLoading = false);
           },
         ),
-      )
-      ..loadRequest(Uri.parse('https://www.msn.com/en-za'));
+      );
+    
+    _loadFeedProvider();
     
     _drawerController = AnimationController(
       vsync: this,
@@ -90,6 +92,15 @@ class _WorkspaceState extends State<Workspace> with SingleTickerProviderStateMix
     super.dispose();
   }
 
+  Future<void> _loadFeedProvider() async {
+    final prefs = await SharedPreferences.getInstance();
+    final provider = prefs.getString('feed_provider') ?? 'msn';
+    final url = provider == 'yahoo' ? 'https://www.yahoo.com' : 'https://www.msn.com';
+    if (mounted) {
+      _webViewController.loadRequest(Uri.parse(url));
+    }
+  }
+
   void _onPageChanged(int index) {
     // If we wanted to trigger an external intent, we'd do it here.
     // Since we are using WebView at index 0, no action is needed.
@@ -110,18 +121,16 @@ class _WorkspaceState extends State<Workspace> with SingleTickerProviderStateMix
   }
 
   void _handleVerticalDragUpdate(DragUpdateDetails details) {
-    if (_isDrawerOpen) {
-      _drawerController.value -= details.primaryDelta! / _drawerHeight;
-    } else {
-      // Swipe up to open drawer
-      if (details.primaryDelta! < 0) {
-        _drawerController.value -= details.primaryDelta! / _drawerHeight;
-      }
-    }
+    _drawerController.value -= details.primaryDelta! / _drawerHeight;
   }
 
   void _handleVerticalDragEnd(DragEndDetails details) {
-    if (_drawerController.value > 0.4) {
+    final velocity = details.primaryVelocity ?? 0;
+    if (velocity < -300) {
+      _openDrawer();
+    } else if (velocity > 300) {
+      _closeDrawer();
+    } else if (_drawerController.value > 0.5) {
       _openDrawer();
     } else {
       _closeDrawer();
@@ -162,6 +171,7 @@ class _WorkspaceState extends State<Workspace> with SingleTickerProviderStateMix
                 HomeScreen(
                   notifications: _notifications,
                   onOpenDrawer: _openDrawer,
+                  onSettingsChanged: _loadFeedProvider,
                 ),
               ],
             ),

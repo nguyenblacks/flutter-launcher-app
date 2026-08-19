@@ -69,11 +69,13 @@ class LauncherItem {
 class HomeScreen extends StatefulWidget {
   final Map<String, int> notifications;
   final VoidCallback onOpenDrawer;
+  final VoidCallback onSettingsChanged;
 
   const HomeScreen({
     super.key,
     required this.notifications,
     required this.onOpenDrawer,
+    required this.onSettingsChanged,
   });
 
   @override
@@ -86,6 +88,7 @@ class _HomeScreenState extends State<HomeScreen> {
   WeatherData? _weatherData;
   late Timer _timer;
   DateTime _currentTime = DateTime.now();
+  bool _showTimeWeather = true;
 
   // Grid Configuration
   final int _columns = 4;
@@ -97,6 +100,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadItems();
     _loadWeather();
     _loadDockApps();
+    _loadSettings();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) setState(() => _currentTime = DateTime.now());
     });
@@ -112,6 +116,15 @@ class _HomeScreenState extends State<HomeScreen> {
     final weather = await WeatherService.getCurrentWeather();
     if (mounted && weather != null) {
       setState(() => _weatherData = weather);
+    }
+  }
+
+  Future<void> _loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(() {
+        _showTimeWeather = prefs.getBool('show_time_weather') ?? true;
+      });
     }
   }
 
@@ -210,7 +223,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(builder: (context) => const HomeSettings()),
-                      );
+                      ).then((_) {
+                        widget.onSettingsChanged();
+                        _loadSettings();
+                      });
                     },
                   ),
                 ],
@@ -316,54 +332,81 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             SizedBox(height: statusBarHeight + 16),
             // Time & Weather Widget Area
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${_currentTime.hour}:${_currentTime.minute.toString().padLeft(2, '0')}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 48,
-                          fontWeight: FontWeight.w300,
-                          shadows: [Shadow(blurRadius: 10.0, color: Colors.black54, offset: Offset(2, 2))],
+            if (_showTimeWeather)
+              GestureDetector(
+                onLongPress: () {
+                  showDialog(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Remove Time & Weather?'),
+                      content: const Text('You can re-enable this later in Home Settings.'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Cancel'),
                         ),
-                      ),
-                      Text(
-                        '${_currentTime.day}/${_currentTime.month}/${_currentTime.year}',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.9),
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                          shadows: const [Shadow(blurRadius: 5.0, color: Colors.black54)],
+                        TextButton(
+                          onPressed: () async {
+                            final prefs = await SharedPreferences.getInstance();
+                            await prefs.setBool('show_time_weather', false);
+                            setState(() => _showTimeWeather = false);
+                            if (mounted) Navigator.pop(context);
+                          },
+                          child: const Text('Remove', style: TextStyle(color: Colors.red)),
                         ),
-                      ),
-                    ],
-                  ),
-                  if (_weatherData != null)
-                    Row(
-                      children: [
-                        Text(
-                          '${_weatherData!.temperature.round()}°',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 36,
-                            fontWeight: FontWeight.w400,
-                            shadows: [Shadow(blurRadius: 8.0, color: Colors.black54, offset: Offset(2, 2))],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        WeatherIcon(weatherCode: _weatherData!.weatherCode, size: 56),
                       ],
                     ),
-                ],
+                  );
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${_currentTime.hour}:${_currentTime.minute.toString().padLeft(2, '0')}',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onSurface,
+                              fontSize: 48,
+                              fontWeight: FontWeight.w300,
+                            ),
+                          ),
+                          Text(
+                            '${_currentTime.day}/${_currentTime.month}/${_currentTime.year}',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.9),
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (_weatherData != null)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 16.0),
+                          child: Row(
+                            children: [
+                              Text(
+                                '${_weatherData!.temperature.round()}°',
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.onSurface,
+                                  fontSize: 36,
+                                  fontWeight: FontWeight.w400,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              WeatherIcon(weatherCode: _weatherData!.weatherCode, size: 56),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
               ),
-            ),
             const SizedBox(height: 16),
 
             // Workspace Grid (Apps & Widgets)
@@ -413,6 +456,31 @@ class _HomeScreenState extends State<HomeScreen> {
                                       x: targetX,
                                       y: targetY,
                                     ));
+                                  } else if (data['type'] == 'widget_preview') {
+                                    LauncherService.allocateWidgetId().then((id) {
+                                      if (id != -1) {
+                                        LauncherService.bindWidget(
+                                          id,
+                                          data['providerPackage'],
+                                          data['providerClass'],
+                                        ).then((success) {
+                                          if (success) {
+                                            _addNewItem(LauncherItem(
+                                              id: DateTime.now().millisecondsSinceEpoch.toString(),
+                                              type: 'widget',
+                                              packageName: data['providerPackage'],
+                                              className: data['providerClass'],
+                                              appWidgetId: id,
+                                              x: targetX,
+                                              y: targetY,
+                                              spanX: 4,
+                                              spanY: 2,
+                                              label: data['label'],
+                                            ));
+                                          }
+                                        });
+                                      }
+                                    });
                                   }
                                 },
                                 builder: (context, candidateData, rejectedData) {
@@ -441,6 +509,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             height: item.spanY * cellHeight,
                             child: LongPressDraggable<Map<String, dynamic>>(
                               data: item.toJson(),
+                              delay: const Duration(milliseconds: 150),
                               feedback: Material(
                                 color: Colors.transparent,
                                 child: Opacity(
@@ -465,11 +534,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
             // App Dock
             GestureDetector(
-              onVerticalDragUpdate: (details) {
-                if (details.primaryDelta! < -5) {
-                   widget.onOpenDrawer();
-                }
-              },
               onTap: widget.onOpenDrawer,
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
@@ -615,6 +679,15 @@ class _HomeScreenState extends State<HomeScreen> {
                   _removeItem(item);
                 },
               ),
+              if (item.type == 'widget')
+                ListTile(
+                  leading: const Icon(Icons.aspect_ratio),
+                  title: const Text('Resize Widget'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showResizeDialog(item);
+                  },
+                ),
               if (item.type == 'app')
                 ListTile(
                   leading: const Icon(Icons.delete_forever, color: Colors.red),
@@ -626,6 +699,92 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
             ],
           ),
+        );
+      },
+    );
+  }
+
+  void _showResizeDialog(LauncherItem item) {
+    int currentSpanX = item.spanX;
+    int currentSpanY = item.spanY;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Resize Widget'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Width:'),
+                      Row(
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.remove_circle_outline),
+                            onPressed: currentSpanX > 1
+                                ? () => setDialogState(() => currentSpanX--)
+                                : null,
+                          ),
+                          Text('$currentSpanX'),
+                          IconButton(
+                            icon: const Icon(Icons.add_circle_outline),
+                            onPressed: (item.x + currentSpanX) < _columns
+                                ? () => setDialogState(() => currentSpanX++)
+                                : null,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Height:'),
+                      Row(
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.remove_circle_outline),
+                            onPressed: currentSpanY > 1
+                                ? () => setDialogState(() => currentSpanY--)
+                                : null,
+                          ),
+                          Text('$currentSpanY'),
+                          IconButton(
+                            icon: const Icon(Icons.add_circle_outline),
+                            onPressed: (item.y + currentSpanY) < _rows
+                                ? () => setDialogState(() => currentSpanY++)
+                                : null,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: () {
+                    setState(() {
+                      item.spanX = currentSpanX;
+                      item.spanY = currentSpanY;
+                    });
+                    _saveItems();
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
         );
       },
     );

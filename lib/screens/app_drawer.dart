@@ -154,7 +154,7 @@ class _AppDrawerState extends State<AppDrawer> {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.9),
+        color: Theme.of(context).colorScheme.surface,
       ),
       padding: const EdgeInsets.fromLTRB(16, 40, 16, 16),
       child: Column(
