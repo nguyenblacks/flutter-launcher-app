@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:swavoti/screens/workspace.dart';
 import 'package:flutter/services.dart';
 
-void main() {
+import 'package:shared_preferences/shared_preferences.dart';
+
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   // Make status bar and navigation bar transparent for edge-to-edge
@@ -15,11 +17,14 @@ void main() {
   );
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
 
-  runApp(const SwavotiApp());
+  final prefs = await SharedPreferences.getInstance();
+
+  runApp(SwavotiApp(prefs: prefs));
 }
 
 class SwavotiApp extends StatelessWidget {
-  const SwavotiApp({super.key});
+  final SharedPreferences prefs;
+  const SwavotiApp({super.key, required this.prefs});
 
   @override
   Widget build(BuildContext context) {
@@ -65,7 +70,7 @@ class SwavotiApp extends StatelessWidget {
               },
             ),
           ),
-          home: const Workspace(),
+          home: Workspace(prefs: prefs),
           debugShowCheckedModeBanner: false,
         );
       },

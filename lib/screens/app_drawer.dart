@@ -3,17 +3,20 @@ import 'package:installed_apps/installed_apps.dart';
 import 'package:installed_apps/app_info.dart';
 import 'package:swavoti/services/launcher_service.dart';
 import 'package:swavoti/services/app_database_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AppDrawer extends StatefulWidget {
   final Map<String, int> notifications;
   final VoidCallback onClose;
   final void Function(Map<String, dynamic>)? onAddToHomeScreen;
+  final ScrollController scrollController;
 
   const AppDrawer({
     super.key,
     required this.notifications,
     required this.onClose,
     this.onAddToHomeScreen,
+    required this.scrollController,
   });
 
   @override
@@ -39,7 +42,6 @@ class _AppDrawerState extends State<AppDrawer> {
   List<AppInfo> _filteredApps = [];
   bool _isLoading = true;
   final TextEditingController _searchController = TextEditingController();
-  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
@@ -51,13 +53,20 @@ class _AppDrawerState extends State<AppDrawer> {
   @override
   void dispose() {
     _searchController.dispose();
-    _scrollController.dispose();
     super.dispose();
   }
 
   Future<void> _loadApps() async {
-    // 1. Instantly load from local SQLite cache
-    final cachedApps = await AppDatabaseService.getAllApps();
+    final prefs = await SharedPreferences.getInstance();
+    final hidden = prefs.getStringList('hidden_apps') ?? [];
+    final showHidden = prefs.getBool('show_hidden_apps') ?? false;
+
+    List<AppInfo> filterApps(List<AppInfo> apps) {
+      if (showHidden) return apps;
+      return apps.where((a) => !hidden.contains(a.packageName)).toList();
+    }
+
+    final cachedApps = filterApps(await AppDatabaseService.getAllApps());
     if (cachedApps.isNotEmpty) {
       if (mounted) {
         setState(() {
@@ -68,12 +77,10 @@ class _AppDrawerState extends State<AppDrawer> {
       }
     }
 
-    // 2. Silently sync in background to catch new installs/uninstalls
-    final freshApps = await AppDatabaseService.syncAppsBackground();
+    final freshApps = filterApps(await AppDatabaseService.syncAppsBackground());
     if (freshApps.isNotEmpty && mounted) {
       setState(() {
         _apps = freshApps;
-        // Re-apply filter if user was searching
         final query = _searchController.text.toLowerCase();
         _filteredApps = _apps
             .where((app) => app.name.toLowerCase().contains(query))
@@ -81,7 +88,6 @@ class _AppDrawerState extends State<AppDrawer> {
         _isLoading = false;
       });
     } else if (cachedApps.isEmpty && mounted) {
-      // Edge case: no apps in cache and sync returned empty
       setState(() {
         _isLoading = false;
       });
@@ -97,154 +103,105 @@ class _AppDrawerState extends State<AppDrawer> {
     });
   }
 
-  void _showAppOptions(AppInfo app) {
-    final isSystemApp = app.isSystemApp ?? false;
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 8),
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.3),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                child: Row(
-                  children: [
-                    if (app.icon != null)
-                      Image.memory(app.icon!, width: 40, height: 40)
-                    else
-                      const Icon(Icons.android, size: 40),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        app.name,
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.add_to_home_screen),
-                title: const Text('Add to Home Screen'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  widget.onAddToHomeScreen?.call({
-                    'type': 'app',
-                    'packageName': app.packageName,
-                    'label': app.name,
-                  });
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.info_outline),
-                title: const Text('App Info'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  LauncherService.openAppInfo(app.packageName);
-                },
-              ),
-              if (!isSystemApp)
-                ListTile(
-                  leading: const Icon(Icons.delete_forever, color: Colors.red),
-                  title: const Text('Uninstall', style: TextStyle(color: Colors.red)),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    LauncherService.uninstallApp(app.packageName);
-                  },
-                ),
-              const SizedBox(height: 8),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      padding: const EdgeInsets.fromLTRB(16, 40, 16, 16),
-      child: Column(
-        children: [
-          // Search box
-          TextField(
-            controller: _searchController,
-            decoration: InputDecoration(
-              hintText: 'Search Apps...',
-              prefixIcon: const Icon(Icons.search),
-              suffixIcon: _searchController.text.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.clear),
-                      onPressed: () => _searchController.clear(),
-                    )
-                  : null,
-              filled: true,
-              fillColor: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.5),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(28),
-                borderSide: BorderSide.none,
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Expanded(
-            child: _isLoading
-                ? const SizedBox.shrink() // Show blank while loading apps
-                : _filteredApps.isEmpty
-                    ? const Center(child: Text('No apps found.'))
-                    : NotificationListener<ScrollUpdateNotification>(
-                        onNotification: (notification) {
-                          // Only close drawer when: at the very top AND dragging downward
-                          if (_scrollController.position.pixels <= 0 &&
-                              notification.scrollDelta != null &&
-                              notification.scrollDelta! < -15) {
-                            widget.onClose();
-                            return true;
-                          }
-                          return false;
-                        },
-                        child: GridView.builder(
-                        controller: _scrollController,
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 4,
-                          mainAxisSpacing: 16,
-                          crossAxisSpacing: 16,
-                          childAspectRatio: 0.85,
-                        ),
-                        itemCount: _filteredApps.length,
-                        itemBuilder: (context, index) {
-                          final app = _filteredApps[index];
-                          final notificationCount = widget.notifications[app.packageName] ?? 0;
-                          return _AppDrawerItem(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      child: CustomScrollView(
+        controller: widget.scrollController,
+        slivers: [
+          SliverToBoxAdapter(
+            child: Column(
+              children: [
+                // Pull handle
+                Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.4),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                // Search box
+                TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: 'Search Apps...',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _searchController.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () => _searchController.clear(),
+                          )
+                        : null,
+                    filled: true,
+                    fillColor: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.5),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(28),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                if (_searchController.text.isEmpty && _filteredApps.length >= 4) ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: _filteredApps.take(4).map((app) {
+                        final notificationCount = widget.notifications[app.packageName] ?? 0;
+                        return Expanded(
+                          child: _AppDrawerItem(
                             app: app,
                             notificationCount: notificationCount,
                             onCloseDrawer: widget.onClose,
-                            onShowOptions: () => _showAppOptions(app),
-                          );
-                        },
-                      ),
+                          ),
+                        );
+                      }).toList(),
                     ),
+                  ),
+                  const Divider(),
+                  const SizedBox(height: 8),
+                ],
+              ],
+            ),
           ),
+          if (_isLoading)
+            const SliverToBoxAdapter(child: SizedBox.shrink())
+          else if (_filteredApps.isEmpty)
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.all(32),
+                child: Center(child: Text('No apps found.')),
+              ),
+            )
+          else
+            SliverGrid(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 4,
+                mainAxisSpacing: 16,
+                crossAxisSpacing: 16,
+                childAspectRatio: 0.85,
+              ),
+              delegate: SliverChildBuilderDelegate(
+                (context, index) {
+                  final app = _filteredApps[index];
+                  final notificationCount = widget.notifications[app.packageName] ?? 0;
+                  return _AppDrawerItem(
+                    app: app,
+                    notificationCount: notificationCount,
+                    onCloseDrawer: widget.onClose,
+                  );
+                },
+                childCount: _filteredApps.length,
+              ),
+            ),
+          const SliverToBoxAdapter(child: SizedBox(height: 24)),
         ],
       ),
     );
@@ -255,13 +212,11 @@ class _AppDrawerItem extends StatefulWidget {
   final AppInfo app;
   final int notificationCount;
   final VoidCallback onCloseDrawer;
-  final VoidCallback onShowOptions;
 
   const _AppDrawerItem({
     required this.app,
     required this.notificationCount,
     required this.onCloseDrawer,
-    required this.onShowOptions,
   });
 
   @override
@@ -284,7 +239,8 @@ class _AppDrawerItemState extends State<_AppDrawerItem> with AutomaticKeepAliveC
 
     return LongPressDraggable<Map<String, dynamic>>(
       data: appItemData,
-      onDragStarted: widget.onCloseDrawer,
+      delay: const Duration(milliseconds: 150),
+      onDragStarted: widget.onCloseDrawer, // Closes drawer when dragged!
       feedback: Material(
         color: Colors.transparent,
         child: Opacity(
@@ -329,7 +285,7 @@ class _AppDrawerItemState extends State<_AppDrawerItem> with AutomaticKeepAliveC
       ),
       child: GestureDetector(
         onTap: () => LauncherService.startApp(app.packageName),
-        onLongPress: widget.onShowOptions,
+        // Removed onLongPress so LongPressDraggable can work natively without conflict
         child: Column(
           children: [
             Stack(

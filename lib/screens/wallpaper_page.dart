@@ -1,7 +1,10 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:swavoti/services/launcher_service.dart';
+import 'package:swavoti/services/app_database_service.dart';
+import 'package:installed_apps/app_info.dart';
+import 'package:swavoti/screens/edit_icons_page.dart';
 
 class WallpaperPage extends StatefulWidget {
   const WallpaperPage({super.key});
@@ -13,18 +16,39 @@ class WallpaperPage extends StatefulWidget {
 class _WallpaperPageState extends State<WallpaperPage> {
   List<String> _wallpapers = [];
   String _currentPreview = '';
+  bool _isLoading = true;
+  List<AppInfo> _dockAppsPreview = [];
 
   @override
   void initState() {
     super.initState();
     _loadWallpapers();
+    _loadDockPreview();
+  }
+
+  Future<void> _loadDockPreview() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedDock = prefs.getStringList('dock_apps');
+    if (savedDock != null && savedDock.isNotEmpty) {
+      List<AppInfo> apps = await AppDatabaseService.getAllApps();
+      final previewApps = <AppInfo>[];
+      for (var pkg in savedDock) {
+        try {
+          previewApps.add(apps.firstWhere((a) => a.packageName == pkg));
+        } catch (_) {}
+      }
+      if (mounted) {
+        setState(() {
+          _dockAppsPreview = previewApps;
+        });
+      }
+    }
   }
 
   Future<void> _loadWallpapers() async {
     try {
-      final manifestContent = await rootBundle.loadString('AssetManifest.json');
-      final Map<String, dynamic> manifestMap = json.decode(manifestContent);
-      final imagePaths = manifestMap.keys
+      final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
+      final imagePaths = manifest.listAssets()
           .where((String key) =>
               key.startsWith('assets/wallpapers/') &&
               (key.endsWith('.jpg') || key.endsWith('.jpeg') ||
@@ -38,10 +62,14 @@ class _WallpaperPageState extends State<WallpaperPage> {
           if (_wallpapers.isNotEmpty) {
             _currentPreview = _wallpapers.first;
           }
+          _isLoading = false;
         });
       }
     } catch (e) {
       print('Error loading wallpapers: $e');
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -203,20 +231,20 @@ class _WallpaperPageState extends State<WallpaperPage> {
         backgroundColor: Colors.transparent,
         elevation: 0,
       ),
-      body: _wallpapers.isEmpty
+      body: _isLoading
           ? Center(
-              child: _wallpapers.isEmpty
-                  ? Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const CircularProgressIndicator(),
-                        const SizedBox(height: 16),
-                        Text('Loading wallpapers...', style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
-                      ],
-                    )
-                  : const Text('No wallpapers found in assets/wallpapers/'),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 16),
+                  Text('Loading wallpapers...', style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
+                ],
+              ),
             )
-          : Column(
+          : _wallpapers.isEmpty
+              ? const Center(child: Text('No wallpapers found in assets/wallpapers/'))
+              : Column(
               children: [
                 const SizedBox(height: 32),
                 Row(
@@ -229,16 +257,34 @@ class _WallpaperPageState extends State<WallpaperPage> {
                 const Spacer(),
                 Padding(
                   padding: const EdgeInsets.all(32.0),
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.photo_library),
-                    label: const Text('Change Wallpaper'),
-                    style: ElevatedButton.styleFrom(
-                      minimumSize: const Size(double.infinity, 56),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
+                  child: Column(
+                    children: [
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.edit),
+                        label: const Text('Edit App Icons'),
+                        style: ElevatedButton.styleFrom(
+                          minimumSize: const Size(double.infinity, 56),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                        onPressed: () {
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => EditIconsPage(backgroundWallpaperPath: _currentPreview)));
+                        },
                       ),
-                    ),
-                    onPressed: _showWallpaperGrid,
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.photo_library),
+                        label: const Text('Change Wallpaper'),
+                        style: ElevatedButton.styleFrom(
+                          minimumSize: const Size(double.infinity, 56),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                        onPressed: _showWallpaperGrid,
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -311,17 +357,30 @@ class _WallpaperPageState extends State<WallpaperPage> {
                   right: 16,
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: List.generate(
-                      4,
-                      (index) => Container(
-                        width: 24,
-                        height: 24,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.8),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    ),
+                    children: _dockAppsPreview.isEmpty
+                        ? List.generate(
+                            4,
+                            (index) => Container(
+                              width: 24,
+                              height: 24,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.8),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          )
+                        : _dockAppsPreview.map((app) {
+                            return app.icon != null
+                                ? Image.memory(app.icon!, width: 24, height: 24)
+                                : Container(
+                                    width: 24,
+                                    height: 24,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withOpacity(0.8),
+                                      shape: BoxShape.circle,
+                                    ),
+                                  );
+                          }).toList(),
                   ),
                 ),
               ]

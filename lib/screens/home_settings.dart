@@ -14,6 +14,8 @@ class _HomeSettingsState extends State<HomeSettings> {
   bool _isLoading = true;
   String _feedProvider = 'msn';
   bool _showTimeWeather = true;
+  int _gridColumns = 4;
+  bool _showHiddenApps = false;
 
   @override
   void initState() {
@@ -28,6 +30,8 @@ class _HomeSettingsState extends State<HomeSettings> {
         _notificationDotsEnabled = prefs.getBool('notification_dots_enabled') ?? false;
         _feedProvider = prefs.getString('feed_provider') ?? 'msn';
         _showTimeWeather = prefs.getBool('show_time_weather') ?? true;
+        _gridColumns = prefs.getInt('grid_columns') ?? 4;
+        _showHiddenApps = prefs.getBool('show_hidden_apps') ?? false;
         _isLoading = false;
       });
     }
@@ -76,6 +80,36 @@ class _HomeSettingsState extends State<HomeSettings> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('show_time_weather', value);
     setState(() => _showTimeWeather = value);
+  }
+
+  Future<void> _toggleShowHiddenApps(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('show_hidden_apps', value);
+    setState(() => _showHiddenApps = value);
+  }
+
+  void _selectGridColumns() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Workspace Grid Size'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [3, 4, 5, 6].map((cols) => ListTile(
+              title: Text('$cols Columns'),
+              trailing: _gridColumns == cols ? const Icon(Icons.check) : null,
+              onTap: () async {
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setInt('grid_columns', cols);
+                setState(() => _gridColumns = cols);
+                if (mounted) Navigator.pop(context);
+              },
+            )).toList(),
+          ),
+        );
+      },
+    );
   }
 
   void _selectFeedProvider() {
@@ -145,6 +179,19 @@ class _HomeSettingsState extends State<HomeSettings> {
                   trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                   onTap: _selectFeedProvider,
                   leading: const Icon(Icons.article_outlined),
+                ),
+                ListTile(
+                  title: const Text('Workspace Grid Size'),
+                  subtitle: Text('$_gridColumns Columns'),
+                  leading: const Icon(Icons.grid_on),
+                  onTap: _selectGridColumns,
+                ),
+                SwitchListTile(
+                  title: const Text('Show Hidden Apps'),
+                  subtitle: const Text('View apps that you have hidden from the app drawer'),
+                  secondary: const Icon(Icons.visibility),
+                  value: _showHiddenApps,
+                  onChanged: _toggleShowHiddenApps,
                 ),
                 const Divider(),
                 ListTile(

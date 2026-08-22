@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:installed_apps/installed_apps.dart';
@@ -9,10 +8,7 @@ import 'package:swavoti/services/launcher_service.dart';
 import 'package:swavoti/screens/widget_bottomsheet.dart';
 import 'package:swavoti/screens/home_settings.dart';
 import 'package:swavoti/screens/wallpaper_page.dart';
-import 'package:swavoti/services/weather_service.dart';
-import 'package:swavoti/widgets/weather_icon.dart';
-import 'package:swavoti/screens/workspace.dart';
-import 'package:swavoti/services/app_database_service.dart';
+import 'package:swavoti/widgets/time_weather_widget.dart';
 import 'dart:async';
 
 class LauncherItem {
@@ -72,16 +68,18 @@ class LauncherItem {
 }
 
 class HomeScreen extends StatefulWidget {
+  final SharedPreferences prefs;
   final Map<String, int> notifications;
-  final VoidCallback onOpenDrawer;
   final VoidCallback onSettingsChanged;
+  final Widget discoverPage;
   final void Function(Map<String, dynamic>)? onAddAppToHomeScreen;
 
   const HomeScreen({
     super.key,
+    required this.prefs,
     required this.notifications,
-    required this.onOpenDrawer,
     required this.onSettingsChanged,
+    required this.discoverPage,
     this.onAddAppToHomeScreen,
   });
 
@@ -91,95 +89,58 @@ class HomeScreen extends StatefulWidget {
 
 class HomeScreenState extends State<HomeScreen> {
   List<LauncherItem> _items = [];
-  List<AppInfo> _dockApps = [];
-  WeatherData? _weatherData;
-  late Timer _timer;
-  DateTime _currentTime = DateTime.now();
+  final Map<String, AppInfo> _appCache = {};
   bool _showTimeWeather = true;
   bool _isDragging = false; // tracks active drag for remove zone
 
   // Grid Configuration
   final int _columns = 4;
   final int _rows = 5;
-  int _currentWorkspacePage = 0;
-  final PageController _workspaceController = PageController();
+  int _currentWorkspacePage = 1;
+  final PageController _workspaceController = PageController(initialPage: 1);
 
   int get _totalPages {
     if (_items.isEmpty) return 2;
     int maxPage = _items.fold<int>(0, (max, item) => item.page > max ? item.page : max);
-    return maxPage + 2; // Always allow 1 extra empty page at the end
+    return maxPage + 2; 
   }
 
   @override
   void initState() {
     super.initState();
-    _loadItems();
-    _loadWeather();
-    _loadDockApps();
-    _loadSettings();
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (mounted) setState(() => _currentTime = DateTime.now());
-    });
+    LauncherService.preloadWidgets();
+    _loadItemsSync();
+    _loadSettingsSync();
   }
 
   @override
   void dispose() {
-    _timer.cancel();
     _workspaceController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadWeather() async {
-    final weather = await WeatherService.getCurrentWeather();
-    if (mounted && weather != null) {
-      setState(() => _weatherData = weather);
-    }
+  void _loadSettingsSync() {
+    _showTimeWeather = widget.prefs.getBool('show_time_weather') ?? true;
   }
 
-  Future<void> _loadSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (mounted) {
-      setState(() {
-        _showTimeWeather = prefs.getBool('show_time_weather') ?? true;
-      });
+  void _loadItemsSync() {
+    final data = widget.prefs.getStringList('launcher_items') ?? [];
+    final loadedItems = data.map((item) => LauncherItem.fromJson(jsonDecode(item))).toList();
+    
+    if (!loadedItems.any((i) => i.page == -1)) {
+       final common = ['com.google.android.dialer', 'com.google.android.apps.messaging', 'com.android.chrome', 'com.google.android.camera'];
+       for (int i = 0; i < 4; i++) {
+         loadedItems.add(LauncherItem(id: 'dock_$i', type: 'app', packageName: common[i], label: 'App', x: i, y: 0, page: -1));
+       }
     }
+    _items = loadedItems;
   }
 
-  Future<void> _loadDockApps() async {
-    List<AppInfo> apps = await AppDatabaseService.getAllApps();
-    if (apps.isEmpty) {
-      apps = await AppDatabaseService.syncAppsBackground();
-    }
-    if (!mounted || apps.isEmpty) return;
-    
-    final dockApps = <AppInfo>[];
-    
-    // Try to find common apps
-    final commonPackages = ['com.google.android.dialer', 'com.android.phone', 'com.google.android.apps.messaging', 'com.android.chrome', 'com.google.android.camera'];
-    for (var pkg in commonPackages) {
-      try {
-        final app = apps.firstWhere((a) => a.packageName == pkg);
-        if (dockApps.length < 4) dockApps.add(app);
-      } catch (_) {}
-    }
-    
-    // Fill the rest with whatever is available
-    for (var app in apps) {
-      if (dockApps.length >= 4) break;
-      if (!dockApps.any((d) => d.packageName == app.packageName)) dockApps.add(app);
-    }
-    
-    setState(() {
-      _dockApps = dockApps;
-    });
-  }
-
-  Future<void> _loadItems() async {
-    final prefs = await SharedPreferences.getInstance();
-    final data = prefs.getStringList('launcher_items') ?? [];
-    setState(() {
-      _items = data.map((item) => LauncherItem.fromJson(jsonDecode(item))).toList();
-    });
+  Future<AppInfo?> _getAppInfo(String packageName) async {
+    if (_appCache.containsKey(packageName)) return _appCache[packageName];
+    final info = await InstalledApps.getAppInfo(packageName);
+    if (info != null && mounted) setState(() => _appCache[packageName] = info);
+    return info;
   }
 
   Future<void> _saveItems() async {
@@ -245,7 +206,9 @@ class HomeScreenState extends State<HomeScreen> {
                         MaterialPageRoute(builder: (context) => const HomeSettings()),
                       ).then((_) {
                         widget.onSettingsChanged();
-                        _loadSettings();
+                        setState(() {
+                          _loadSettingsSync();
+                        });
                       });
                     },
                   ),
@@ -417,90 +380,13 @@ class HomeScreenState extends State<HomeScreen> {
             SizedBox(height: statusBarHeight + 16),
             // Time & Weather Widget Area
             if (_showTimeWeather)
-              GestureDetector(
-                onLongPress: () {
-                  showDialog(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: const Text('Remove Time & Weather?'),
-                      content: const Text('You can re-enable this later in Home Settings.'),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('Cancel'),
-                        ),
-                        TextButton(
-                          onPressed: () async {
-                            final prefs = await SharedPreferences.getInstance();
-                            await prefs.setBool('show_time_weather', false);
-                            setState(() => _showTimeWeather = false);
-                            if (mounted) Navigator.pop(context);
-                          },
-                          child: const Text('Remove', style: TextStyle(color: Colors.red)),
-                        ),
-                      ],
-                    ),
-                  );
+              TimeWeatherWidget(
+                onRemove: () async {
+                  final prefs = await SharedPreferences.getInstance();
+                  await prefs.setBool('show_time_weather', false);
+                  setState(() => _showTimeWeather = false);
                 },
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      // Left: Time & Date
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '${_currentTime.hour}:${_currentTime.minute.toString().padLeft(2, '0')}',
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.onSurface,
-                              fontSize: 48,
-                              fontWeight: FontWeight.w300,
-                            ),
-                          ),
-                          Text(
-                            '${_currentTime.day}/${_currentTime.month}/${_currentTime.year}',
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.9),
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                      // Right: small weather info, tappable
-                      if (_weatherData != null)
-                        GestureDetector(
-                          onTap: () {
-                            LauncherService.launchGoogleWeather();
-                          },
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              WeatherIcon(
-                                weatherCode: _weatherData!.weatherCode,
-                                size: 32,
-                                isNight: _currentTime.hour < 6 || _currentTime.hour >= 20,
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '${_weatherData!.temperature.round()}°',
-                                style: TextStyle(
-                                  color: Theme.of(context).colorScheme.onSurface,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
               ),
-
 
             // Workspace Grid (Apps & Widgets)
             Expanded(
@@ -512,11 +398,14 @@ class HomeScreenState extends State<HomeScreen> {
                     final cellHeight = constraints.maxHeight / _rows;
 
                     return PageView.builder(
-                      physics: const ClampingScrollPhysics(), // Pass overscroll to parent (News page)
+                      physics: const BouncingScrollPhysics(),
                       controller: _workspaceController,
-                      itemCount: _totalPages,
+                      itemCount: _totalPages + 1, // Discover + Workspaces
                       onPageChanged: (index) => setState(() => _currentWorkspacePage = index),
-                      itemBuilder: (context, pageIndex) {
+                      itemBuilder: (context, index) {
+                        if (index == 0) return widget.discoverPage;
+                        
+                        final pageIndex = index - 1;
                         final pageItems = _items.where((i) => i.page == pageIndex).toList();
 
                         return Stack(
@@ -712,60 +601,108 @@ class HomeScreenState extends State<HomeScreen> {
                   final isHovered = candidateData.isNotEmpty;
                   return AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
-                    margin: const EdgeInsets.symmetric(horizontal: 32, vertical: 8),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    margin: const EdgeInsets.symmetric(vertical: 16),
+                    padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: isHovered
-                          ? Colors.red.withOpacity(0.85)
-                          : Colors.black.withOpacity(0.5),
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(
-                        color: isHovered ? Colors.red : Colors.white54,
-                        width: 2,
-                      ),
+                      color: isHovered ? Colors.red.withOpacity(0.85) : Colors.black.withOpacity(0.5),
+                      shape: BoxShape.circle,
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.delete_outline,
-                          color: isHovered ? Colors.white : Colors.white70,
-                          size: 28,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Remove',
-                          style: TextStyle(
-                            color: isHovered ? Colors.white : Colors.white70,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ],
+                    child: Icon(
+                      Icons.delete_outline,
+                      color: isHovered ? Colors.white : Colors.white70,
+                      size: 32,
                     ),
                   );
                 },
               ),
 
             // App Dock
-            GestureDetector(
-              onTap: widget.onOpenDrawer,
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
-                margin: const EdgeInsets.only(bottom: 16, left: 16, right: 16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: _dockApps.isEmpty 
-                    ? [const CircularProgressIndicator(color: Colors.white)]
-                    : _dockApps.map((app) {
-                    return GestureDetector(
-                      onTap: () => LauncherService.startApp(app.packageName),
-                      child: app.icon != null
-                          ? Image.memory(app.icon!, width: 56, height: 56)
-                          : const Icon(Icons.android, size: 56, color: Colors.white),
-                    );
-                  }).toList(),
-                ),
+            Container(
+              height: 90,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              margin: const EdgeInsets.only(bottom: 16),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final cellWidth = constraints.maxWidth / 4;
+                  final dockItems = _items.where((i) => i.page == -1).toList();
+                  
+                  return Stack(
+                    children: [
+                      // Drop targets for the 4 dock slots
+                      for (int x = 0; x < 4; x++)
+                        Positioned(
+                          left: x * cellWidth,
+                          top: 0,
+                          width: cellWidth,
+                          height: 90,
+                          child: DragTarget<Map<String, dynamic>>(
+                            onWillAcceptWithDetails: (details) => true,
+                            onAcceptWithDetails: (details) {
+                              final data = details.data;
+                              if (data['id'] != null) {
+                                setState(() {
+                                  final item = _items.firstWhere((i) => i.id == data['id']);
+                                  item.x = x;
+                                  item.y = 0;
+                                  item.page = -1;
+                                });
+                                _saveItems();
+                              } else if (data['type'] == 'app') {
+                                _addNewItem(LauncherItem(
+                                  id: DateTime.now().millisecondsSinceEpoch.toString(),
+                                  type: 'app',
+                                  packageName: data['packageName'],
+                                  label: data['label'],
+                                  x: x,
+                                  y: 0,
+                                  page: -1,
+                                ));
+                              }
+                            },
+                            builder: (context, candidateData, rejectedData) {
+                              return Container(
+                                margin: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: candidateData.isNotEmpty ? Theme.of(context).colorScheme.primary.withOpacity(0.5) : Colors.transparent,
+                                    width: 2,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      
+                      // Dock Items
+                      ...dockItems.map((item) {
+                        return Positioned(
+                          left: item.x * cellWidth,
+                          top: 0,
+                          width: cellWidth,
+                          height: 90,
+                          child: LongPressDraggable<Map<String, dynamic>>(
+                            data: item.toJson(),
+                            delay: const Duration(milliseconds: 150),
+                            onDragStarted: () => setState(() => _isDragging = true),
+                            onDragEnd: (_) => setState(() => _isDragging = false),
+                            onDraggableCanceled: (_, __) => setState(() => _isDragging = false),
+                            feedback: Material(
+                              color: Colors.transparent,
+                              child: Opacity(opacity: 0.7, child: _buildItemContent(item, cellWidth, 90)),
+                            ),
+                            childWhenDragging: const SizedBox.shrink(),
+                            child: GestureDetector(
+                              onTap: () => LauncherService.startApp(item.packageName),
+                              onLongPress: () => _showItemContextMenu(item),
+                              child: _buildItemContent(item, cellWidth, 90),
+                            ),
+                          ),
+                        );
+                      }),
+                    ],
+                  );
+                },
               ),
             ),
             const SizedBox(height: 16),
@@ -794,7 +731,7 @@ class HomeScreenState extends State<HomeScreen> {
     } else {
       // App icon
       return FutureBuilder<AppInfo?>(
-        future: InstalledApps.getAppInfo(item.packageName),
+        future: _getAppInfo(item.packageName),
         builder: (context, snapshot) {
           if (!snapshot.hasData || snapshot.data == null) {
             return const SizedBox.shrink();

@@ -156,16 +156,7 @@ class MainActivity : FlutterActivity() {
                             val intent = packageManager.getLaunchIntentForPackage(packageName)
                             if (intent != null) {
                                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                val width = window.decorView.width
-                                val height = window.decorView.height
-                                val options = android.app.ActivityOptions.makeScaleUpAnimation(
-                                    window.decorView,
-                                    width / 2,
-                                    height / 2,
-                                    0,
-                                    0
-                                )
-                                startActivity(intent, options.toBundle())
+                                startActivity(intent)
                                 result.success(true)
                             } else {
                                 result.success(false)

@@ -6,6 +6,20 @@ class LauncherService {
   static const _widgetChannel = MethodChannel('co.za.launcher3.swavoti/widgets');
   static const _notificationChannel = EventChannel('co.za.launcher3.swavoti/notifications');
 
+  static List<Map<String, dynamic>>? _cachedWidgets;
+
+  static Future<void> preloadWidgets() async {
+    if (_cachedWidgets != null) return;
+    try {
+      final List<dynamic>? widgets = await _widgetChannel.invokeMethod('getAllWidgets');
+      if (widgets != null) {
+        _cachedWidgets = widgets.map((w) => Map<String, dynamic>.from(w as Map)).toList();
+      }
+    } catch (e) {
+      print('Error preloading widgets: $e');
+    }
+  }
+
   // System Actions
   static Future<void> uninstallApp(String packageName) async {
     try {
@@ -86,10 +100,12 @@ class LauncherService {
 
   // Widget Actions
   static Future<List<Map<String, dynamic>>> getAllWidgets() async {
+    if (_cachedWidgets != null) return _cachedWidgets!;
     try {
       final List<dynamic>? widgets = await _widgetChannel.invokeMethod('getAllWidgets');
       if (widgets != null) {
-        return widgets.map((w) => Map<String, dynamic>.from(w as Map)).toList();
+        _cachedWidgets = widgets.map((w) => Map<String, dynamic>.from(w as Map)).toList();
+        return _cachedWidgets!;
       }
     } catch (e) {
       print('Error getting widgets: $e');

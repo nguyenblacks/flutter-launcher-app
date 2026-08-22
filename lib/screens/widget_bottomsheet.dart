@@ -1,6 +1,9 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:swavoti/services/launcher_service.dart';
+import 'package:installed_apps/installed_apps.dart';
+import 'package:installed_apps/app_info.dart';
 
 class WidgetBottomSheet extends StatefulWidget {
   final Function(Map<String, dynamic>) onWidgetSelected;
@@ -25,15 +28,15 @@ class _WidgetBottomSheetState extends State<WidgetBottomSheet> {
 
   Future<void> _loadWidgetsIncremental() async {
     final all = await LauncherService.getAllWidgets();
-    for (final w in all) {
-      if (!mounted) break;
-      final pkg = w['providerPackage'] as String? ?? 'Unknown';
-      setState(() {
+    if (!mounted) return;
+    
+    setState(() {
+      for (final w in all) {
+        final pkg = w['providerPackage'] as String? ?? 'Unknown';
         _groupedWidgets.putIfAbsent(pkg, () => []).add(w);
-      });
-      await Future.delayed(const Duration(milliseconds: 10));
-    }
-    if (mounted) setState(() => _loadingDone = true);
+      }
+      _loadingDone = true;
+    });
   }
 
   @override
@@ -64,12 +67,6 @@ class _WidgetBottomSheetState extends State<WidgetBottomSheet> {
             children: [
               Text('Choose Widget', style: Theme.of(context).textTheme.headlineSmall),
               const Spacer(),
-              if (!_loadingDone)
-                const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
             ],
           ),
           const SizedBox(height: 16),
@@ -90,14 +87,22 @@ class _WidgetBottomSheetState extends State<WidgetBottomSheet> {
                         margin: const EdgeInsets.symmetric(vertical: 6),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                         child: ExpansionTile(
-                          leading: Container(
-                            width: 48,
-                            height: 48,
-                            decoration: BoxDecoration(
-                              color: cs.primaryContainer,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Icon(Icons.widgets, color: cs.onPrimaryContainer, size: 28),
+                          leading: FutureBuilder<AppInfo?>(
+                            future: InstalledApps.getAppInfo(pkg),
+                            builder: (context, snapshot) {
+                              if (snapshot.hasData && snapshot.data?.icon != null) {
+                                return Image.memory(snapshot.data!.icon!, width: 48, height: 48);
+                              }
+                              return Container(
+                                width: 48,
+                                height: 48,
+                                decoration: BoxDecoration(
+                                  color: cs.primaryContainer,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Icon(Icons.widgets, color: cs.onPrimaryContainer, size: 28),
+                              );
+                            },
                           ),
                           title: Text(
                             appName.isNotEmpty ? appName : pkg,
