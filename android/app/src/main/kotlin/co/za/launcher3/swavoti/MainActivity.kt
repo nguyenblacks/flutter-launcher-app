@@ -9,7 +9,6 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.Drawable
 import android.net.Uri
-import android.os.Bundle
 import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.android.FlutterActivityLaunchConfigs
@@ -26,34 +25,22 @@ class MainActivity : FlutterActivity() {
     private val SYSTEM_CHANNEL = "co.za.launcher3.swavoti/system"
     private val NOTIFICATION_CHANNEL = "co.za.launcher3.swavoti/notifications"
 
-    private lateinit var appWidgetManager: AppWidgetManager
-    private lateinit var appWidgetHost: AppWidgetHost
-    private val APPWIDGET_HOST_ID = 1024
+    private val appWidgetManager: AppWidgetManager
+        get() = goApp.appWidgetManager
+    private val appWidgetHost: AppWidgetHost
+        get() = goApp.appWidgetHost
+
+    private val goApp: GoLauncherApplication
+        get() = application as GoLauncherApplication
+
     private val REQUEST_BIND_APPWIDGET = 100
 
     private var pendingWidgetIdToBind: Int = -1
     private var pendingWidgetMethodResult: MethodChannel.Result? = null
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        // MUST initialize before super.onCreate() because Flutter calls
-        // configureFlutterEngine() synchronously inside super.onCreate(),
-        // and configureFlutterEngine() references appWidgetHost.
-        appWidgetManager = AppWidgetManager.getInstance(this)
-        appWidgetHost = AppWidgetHost(this, APPWIDGET_HOST_ID)
-        super.onCreate(savedInstanceState)
-        try {
-            appWidgetHost.startListening()
-        } catch (e: Exception) {
-            // AppWidgetHost unavailable on this device — widgets won't work but app won't crash
-        }
-    }
+    override fun getCachedEngineId(): String = GoLauncherApplication.ENGINE_ID
 
-    override fun onDestroy() {
-        try {
-            appWidgetHost.stopListening()
-        } catch (e: Exception) { /* ignore */ }
-        super.onDestroy()
-    }
+    override fun shouldDestroyEngineWithHost(): Boolean = false
 
     override fun getBackgroundMode(): FlutterActivityLaunchConfigs.BackgroundMode {
         return FlutterActivityLaunchConfigs.BackgroundMode.transparent
@@ -62,10 +49,14 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
-        flutterEngine.platformViewsController.registry.registerViewFactory(
-            "widget_view",
-            WidgetViewFactory(appWidgetHost)
-        )
+        try {
+            flutterEngine.platformViewsController.registry.registerViewFactory(
+                "widget_view",
+                WidgetViewFactory(appWidgetHost)
+            )
+        } catch (_: Exception) {
+            // Already registered on the cached engine.
+        }
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, WIDGET_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {

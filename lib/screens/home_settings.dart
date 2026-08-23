@@ -53,8 +53,8 @@ class _HomeSettingsState extends State<HomeSettings> {
             return AlertDialog(
               title: const Text('Grant Notification Access'),
               content: const Text(
-                'To display notification dots on app icons, Swavoti Launcher requires Notification Access. '
-                'Please locate Swavoti Launcher in the next screen and turn on the permission.',
+                'To display notification dots on app icons, Go Launcher 7 requires Notification Access. '
+                'Please locate Go Launcher 7 in the next screen and turn on the permission.',
               ),
               actions: [
                 TextButton(
@@ -196,7 +196,7 @@ class _HomeSettingsState extends State<HomeSettings> {
                 const Divider(),
                 ListTile(
                   leading: const Icon(Icons.info_outline),
-                  title: const Text('Swavoti Launcher'),
+                  title: const Text('Go Launcher 7'),
                   subtitle: const Text('Version 1.0.0 (co.za.launcher3.swavoti)'),
                 ),
               ],

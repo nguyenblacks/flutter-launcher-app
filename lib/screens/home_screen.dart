@@ -8,6 +8,7 @@ import 'package:swavoti/services/launcher_service.dart';
 import 'package:swavoti/screens/widget_bottomsheet.dart';
 import 'package:swavoti/screens/home_settings.dart';
 import 'package:swavoti/screens/wallpaper_page.dart';
+import 'package:swavoti/screens/discover_news.dart';
 import 'package:swavoti/widgets/time_weather_widget.dart';
 import 'dart:async';
 
@@ -69,17 +70,17 @@ class LauncherItem {
 
 class HomeScreen extends StatefulWidget {
   final SharedPreferences prefs;
+  final Map<String, AppInfo> appCache;
   final Map<String, int> notifications;
   final VoidCallback onSettingsChanged;
-  final Widget discoverPage;
   final void Function(Map<String, dynamic>)? onAddAppToHomeScreen;
 
   const HomeScreen({
     super.key,
     required this.prefs,
+    required this.appCache,
     required this.notifications,
     required this.onSettingsChanged,
-    required this.discoverPage,
     this.onAddAppToHomeScreen,
   });
 
@@ -89,28 +90,31 @@ class HomeScreen extends StatefulWidget {
 
 class HomeScreenState extends State<HomeScreen> {
   List<LauncherItem> _items = [];
-  final Map<String, AppInfo> _appCache = {};
+  late Map<String, AppInfo> _appCache;
   bool _showTimeWeather = true;
-  bool _isDragging = false; // tracks active drag for remove zone
+  bool _isDragging = false;
+  bool _isNavigatingToDiscover = false;
 
   // Grid Configuration
   final int _columns = 4;
   final int _rows = 5;
-  int _currentWorkspacePage = 1;
-  final PageController _workspaceController = PageController(initialPage: 1);
+  int _currentWorkspacePage = 0;
+  late final PageController _workspaceController;
 
   int get _totalPages {
-    if (_items.isEmpty) return 2;
-    int maxPage = _items.fold<int>(0, (max, item) => item.page > max ? item.page : max);
-    return maxPage + 2; 
+    if (_items.isEmpty) return 1;
+    int maxPage = _items.fold<int>(0, (max, item) => item.page > max && item.page >= 0 ? item.page : max);
+    return maxPage + 2; // extra blank page at end for adding new pages
   }
 
   @override
   void initState() {
     super.initState();
     LauncherService.preloadWidgets();
+    _appCache = Map<String, AppInfo>.from(widget.appCache); // seed with pre-warmed cache
     _loadItemsSync();
     _loadSettingsSync();
+    _workspaceController = PageController(initialPage: 0);
   }
 
   @override
@@ -397,16 +401,45 @@ class HomeScreenState extends State<HomeScreen> {
                     final cellWidth = constraints.maxWidth / _columns;
                     final cellHeight = constraints.maxHeight / _rows;
 
-                    return PageView.builder(
-                      physics: const BouncingScrollPhysics(),
-                      controller: _workspaceController,
-                      itemCount: _totalPages + 1, // Discover + Workspaces
-                      onPageChanged: (index) => setState(() => _currentWorkspacePage = index),
-                      itemBuilder: (context, index) {
-                        if (index == 0) return widget.discoverPage;
-                        
-                        final pageIndex = index - 1;
-                        final pageItems = _items.where((i) => i.page == pageIndex).toList();
+                    return NotificationListener<OverscrollNotification>(
+                      onNotification: (notification) {
+                        // Overscroll to the left on the first workspace -> open Discover
+                        if (_currentWorkspacePage == 0 &&
+                            notification.overscroll < -50 &&
+                            !_isNavigatingToDiscover) {
+                          _isNavigatingToDiscover = true;
+                          Navigator.of(context).push(
+                            PageRouteBuilder(
+                              pageBuilder: (_, __, ___) => const DiscoverNewsPage(),
+                              transitionsBuilder: (_, animation, __, child) {
+                                return SlideTransition(
+                                  position: Tween<Offset>(
+                                    begin: const Offset(-1, 0),
+                                    end: Offset.zero,
+                                  ).animate(CurvedAnimation(
+                                    parent: animation,
+                                    curve: Curves.easeOutCubic,
+                                  )),
+                                  child: child,
+                                );
+                              },
+                              transitionDuration: const Duration(milliseconds: 280),
+                            ),
+                          ).then((_) => _isNavigatingToDiscover = false);
+                        }
+                        return false;
+                      },
+                      child: PageView.builder(
+                        physics: const BouncingScrollPhysics(),
+                        controller: _workspaceController,
+                        itemCount: _totalPages,
+                        onPageChanged: (index) {
+                          setState(() => _currentWorkspacePage = index);
+                        },
+                        itemBuilder: (context, index) {
+                          final pageIndex = index;
+                          final pageItems = _items.where((i) => i.page == pageIndex).toList();
+
 
                         return Stack(
                           children: [
@@ -559,30 +592,63 @@ class HomeScreenState extends State<HomeScreen> {
                               ),
                           ],
                         );
-                      },
+                        },
+                      ),
                     );
                   },
                 ),
-              ),
+              )
             ),
-            
             // Workspace Page Indicator (At bottom)
+            // Shows one extra dot for the Discover page (left of page 0)
             const SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(_totalPages, (index) {
-                return Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: _currentWorkspacePage == index
-                        ? Theme.of(context).colorScheme.primary
-                        : Theme.of(context).colorScheme.onSurface.withOpacity(0.3),
+              children: [
+                // Discover dot
+                GestureDetector(
+                  onTap: () {
+                    if (!_isNavigatingToDiscover) {
+                      _isNavigatingToDiscover = true;
+                      Navigator.of(context).push(
+                        PageRouteBuilder(
+                          pageBuilder: (_, _, _) => const DiscoverNewsPage(),
+                          transitionsBuilder: (_, animation, _, child) => SlideTransition(
+                            position: Tween<Offset>(begin: const Offset(-1, 0), end: Offset.zero)
+                                .animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+                            child: child,
+                          ),
+                          transitionDuration: const Duration(milliseconds: 280),
+                        ),
+                      ).then((_) => _isNavigatingToDiscover = false);
+                    }
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white54, width: 1.5),
+                      color: Colors.transparent,
+                    ),
                   ),
-                );
-              }),
+                ),
+                // Workspace dots
+                ...List.generate(_totalPages, (index) {
+                  return Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: _currentWorkspacePage == index
+                          ? Colors.white
+                          : Colors.white.withValues(alpha: 0.35),
+                    ),
+                  );
+                }),
+              ],
             ),
             const SizedBox(height: 16),
 

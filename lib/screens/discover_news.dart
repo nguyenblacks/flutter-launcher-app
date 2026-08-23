@@ -1,0 +1,100 @@
+import 'package:flutter/material.dart';
+import 'package:webview_flutter/webview_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+class DiscoverNewsPage extends StatefulWidget {
+  const DiscoverNewsPage({super.key});
+
+  @override
+  State<DiscoverNewsPage> createState() => _DiscoverNewsPageState();
+}
+
+class _DiscoverNewsPageState extends State<DiscoverNewsPage> {
+  late WebViewController _webViewController;
+  bool _isLoading = true;
+  bool _hasError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initWebView();
+  }
+
+  Future<void> _initWebView() async {
+    final prefs = await SharedPreferences.getInstance();
+    final provider = prefs.getString('feed_provider') ?? 'msn';
+    final url = provider == 'yahoo' ? 'https://www.yahoo.com' : 'https://www.msn.com';
+
+    _webViewController = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onProgress: (progress) {
+            if (mounted) setState(() => _isLoading = progress < 100);
+          },
+          onPageStarted: (_) {
+            if (mounted) setState(() {
+              _isLoading = true;
+              _hasError = false;
+            });
+          },
+          onPageFinished: (_) {
+            if (mounted) setState(() => _isLoading = false);
+          },
+          onWebResourceError: (_) {
+            if (mounted) setState(() {
+              _isLoading = false;
+              _hasError = true;
+            });
+          },
+        ),
+      )
+      ..loadRequest(Uri.parse(url));
+
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        child: Stack(
+          children: [
+            if (_hasError)
+              Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.wifi_off, size: 64, color: Colors.white54),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'No Internet Connection',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: () {
+                        setState(() => _hasError = false);
+                        _webViewController.reload();
+                      },
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              )
+            else if (!_isLoading || _isLoading)
+              WebViewWidget(controller: _webViewController),
+            if (_isLoading && !_hasError)
+              const Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: LinearProgressIndicator(minHeight: 2),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}

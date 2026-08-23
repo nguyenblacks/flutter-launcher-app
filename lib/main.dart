@@ -1,8 +1,9 @@
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
 import 'package:swavoti/screens/workspace.dart';
+import 'package:swavoti/services/app_database_service.dart';
 import 'package:flutter/services.dart';
-
+import 'package:installed_apps/app_info.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() async {
@@ -19,12 +20,22 @@ void main() async {
 
   final prefs = await SharedPreferences.getInstance();
 
-  runApp(SwavotiApp(prefs: prefs));
+  // Pre-warm icon cache from SQLite so icons show on first frame (no jank on unlock)
+  final List<AppInfo> cachedApps = await AppDatabaseService.getAllApps();
+  final Map<String, AppInfo> appCache = {
+    for (final app in cachedApps) app.packageName: app
+  };
+
+  // Sync fresh apps in background (won't block startup)
+  AppDatabaseService.syncAppsBackground();
+
+  runApp(SwavotiApp(prefs: prefs, appCache: appCache));
 }
 
 class SwavotiApp extends StatelessWidget {
   final SharedPreferences prefs;
-  const SwavotiApp({super.key, required this.prefs});
+  final Map<String, AppInfo> appCache;
+  const SwavotiApp({super.key, required this.prefs, required this.appCache});
 
   @override
   Widget build(BuildContext context) {
@@ -46,7 +57,7 @@ class SwavotiApp extends StatelessWidget {
         }
 
         return MaterialApp(
-          title: 'Swavoti Launcher',
+          title: 'Go Launcher 7',
           theme: ThemeData(
             colorScheme: lightColorScheme,
             scaffoldBackgroundColor: Colors.transparent,
@@ -70,7 +81,10 @@ class SwavotiApp extends StatelessWidget {
               },
             ),
           ),
-          home: Workspace(prefs: prefs),
+          home: PopScope(
+            canPop: false,
+            child: Workspace(prefs: prefs, appCache: appCache),
+          ),
           debugShowCheckedModeBanner: false,
         );
       },
