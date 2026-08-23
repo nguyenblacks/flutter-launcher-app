@@ -25,6 +25,7 @@ class GoLauncherApplication : Application() {
             // Widgets unavailable on this device — launcher still works.
         }
         prewarmEngine()
+        LauncherKeepAliveService.start(this)
     }
 
     private fun prewarmEngine() {

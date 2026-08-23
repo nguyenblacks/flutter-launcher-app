@@ -9,6 +9,9 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.Drawable
 import android.net.Uri
+import android.os.Build
+import android.os.Bundle
+import android.os.PowerManager
 import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.android.FlutterActivityLaunchConfigs
@@ -37,6 +40,13 @@ class MainActivity : FlutterActivity() {
 
     private var pendingWidgetIdToBind: Int = -1
     private var pendingWidgetMethodResult: MethodChannel.Result? = null
+    private var askedBatteryExemption = false
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        LauncherKeepAliveService.start(this)
+        requestUnrestrictedBackground()
+    }
 
     override fun getCachedEngineId(): String = GoLauncherApplication.ENGINE_ID
 
@@ -44,6 +54,31 @@ class MainActivity : FlutterActivity() {
 
     override fun getBackgroundMode(): FlutterActivityLaunchConfigs.BackgroundMode {
         return FlutterActivityLaunchConfigs.BackgroundMode.transparent
+    }
+
+    override fun onDestroy() {
+        // Keep the Flutter engine and keep-alive service. Locking the phone
+        // must not tear the launcher down.
+        super.onDestroy()
+    }
+
+    private fun requestUnrestrictedBackground() {
+        if (askedBatteryExemption) return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+        val powerManager = getSystemService(PowerManager::class.java) ?: return
+        if (powerManager.isIgnoringBatteryOptimizations(packageName)) return
+        askedBatteryExemption = true
+        try {
+            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+            intent.data = Uri.parse("package:$packageName")
+            startActivity(intent)
+        } catch (_: Exception) {
+            try {
+                startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+            } catch (_: Exception) {
+                // User can still disable battery restriction in system settings.
+            }
+        }
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
