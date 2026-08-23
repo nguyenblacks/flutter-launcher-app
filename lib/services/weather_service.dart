@@ -11,7 +11,7 @@ class WeatherData {
 class WeatherService {
   // Free IP geolocation API (HTTPS enabled)
   static const _ipApiUrl = 'https://ipinfo.io/json';
-  
+
   // Open-Meteo API (requires no API key)
   static const _weatherApiUrl = 'https://api.open-meteo.com/v1/forecast';
 
@@ -34,14 +34,16 @@ class WeatherService {
       if (lat == null || lon == null) return null;
 
       // 2. Fetch weather for those coordinates
-      final weatherUrl = Uri.parse('$_weatherApiUrl?latitude=$lat&longitude=$lon&current_weather=true');
+      final weatherUrl = Uri.parse(
+        '$_weatherApiUrl?latitude=$lat&longitude=$lon&current_weather=true',
+      );
       final weatherResponse = await http.get(weatherUrl);
 
       if (weatherResponse.statusCode != 200) return null;
 
       final weatherData = jsonDecode(weatherResponse.body);
       final current = weatherData['current_weather'];
-      
+
       return WeatherData(
         temperature: (current['temperature'] as num).toDouble(),
         weatherCode: (current['weathercode'] as num).toInt(),

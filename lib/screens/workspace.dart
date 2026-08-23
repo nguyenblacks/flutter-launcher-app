@@ -20,8 +20,10 @@ class _WorkspaceState extends State<Workspace> {
   Map<String, int> _notifications = {};
   StreamSubscription<Map<String, int>>? _notificationSubscription;
 
-  final GlobalKey<HomeScreenState> _homeScreenKey = GlobalKey<HomeScreenState>();
-  final DraggableScrollableController _sheetController = DraggableScrollableController();
+  final GlobalKey<HomeScreenState> _homeScreenKey =
+      GlobalKey<HomeScreenState>();
+  final DraggableScrollableController _sheetController =
+      DraggableScrollableController();
   double _drawerExtent = 0.0;
 
   @override

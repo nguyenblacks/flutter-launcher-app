@@ -27,7 +27,8 @@ class _HomeSettingsState extends State<HomeSettings> {
     final prefs = await SharedPreferences.getInstance();
     if (mounted) {
       setState(() {
-        _notificationDotsEnabled = prefs.getBool('notification_dots_enabled') ?? false;
+        _notificationDotsEnabled =
+            prefs.getBool('notification_dots_enabled') ?? false;
         _feedProvider = prefs.getString('feed_provider') ?? 'msn';
         _showTimeWeather = prefs.getBool('show_time_weather') ?? true;
         _gridColumns = prefs.getInt('grid_columns') ?? 4;
@@ -96,16 +97,22 @@ class _HomeSettingsState extends State<HomeSettings> {
           title: const Text('Workspace Grid Size'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
-            children: [3, 4, 5, 6].map((cols) => ListTile(
-              title: Text('$cols Columns'),
-              trailing: _gridColumns == cols ? const Icon(Icons.check) : null,
-              onTap: () async {
-                final prefs = await SharedPreferences.getInstance();
-                await prefs.setInt('grid_columns', cols);
-                setState(() => _gridColumns = cols);
-                if (mounted) Navigator.pop(context);
-              },
-            )).toList(),
+            children: [3, 4, 5, 6]
+                .map(
+                  (cols) => ListTile(
+                    title: Text('$cols Columns'),
+                    trailing: _gridColumns == cols
+                        ? const Icon(Icons.check)
+                        : null,
+                    onTap: () async {
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.setInt('grid_columns', cols);
+                      setState(() => _gridColumns = cols);
+                      if (mounted) Navigator.pop(context);
+                    },
+                  ),
+                )
+                .toList(),
           ),
         );
       },
@@ -123,7 +130,9 @@ class _HomeSettingsState extends State<HomeSettings> {
             children: [
               ListTile(
                 title: const Text('MSN'),
-                trailing: _feedProvider == 'msn' ? const Icon(Icons.check) : null,
+                trailing: _feedProvider == 'msn'
+                    ? const Icon(Icons.check)
+                    : null,
                 onTap: () async {
                   final prefs = await SharedPreferences.getInstance();
                   await prefs.setString('feed_provider', 'msn');
@@ -133,7 +142,9 @@ class _HomeSettingsState extends State<HomeSettings> {
               ),
               ListTile(
                 title: const Text('Yahoo'),
-                trailing: _feedProvider == 'yahoo' ? const Icon(Icons.check) : null,
+                trailing: _feedProvider == 'yahoo'
+                    ? const Icon(Icons.check)
+                    : null,
                 onTap: () async {
                   final prefs = await SharedPreferences.getInstance();
                   await prefs.setString('feed_provider', 'yahoo');
@@ -152,23 +163,25 @@ class _HomeSettingsState extends State<HomeSettings> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
-      appBar: AppBar(
-        title: const Text('Home Settings'),
-      ),
+      appBar: AppBar(title: const Text('Home Settings')),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
               children: [
                 SwitchListTile(
                   title: const Text('Notification Dots'),
-                  subtitle: const Text('Show a dot on app icons when there are unread notifications'),
+                  subtitle: const Text(
+                    'Show a dot on app icons when there are unread notifications',
+                  ),
                   value: _notificationDotsEnabled,
                   onChanged: _toggleNotificationDots,
                   secondary: const Icon(Icons.notification_important),
                 ),
                 SwitchListTile(
                   title: const Text('Show Time & Weather'),
-                  subtitle: const Text('Display the time and weather widget on the home screen'),
+                  subtitle: const Text(
+                    'Display the time and weather widget on the home screen',
+                  ),
                   value: _showTimeWeather,
                   onChanged: _toggleTimeWeather,
                   secondary: const Icon(Icons.access_time),
@@ -188,7 +201,9 @@ class _HomeSettingsState extends State<HomeSettings> {
                 ),
                 SwitchListTile(
                   title: const Text('Show Hidden Apps'),
-                  subtitle: const Text('View apps that you have hidden from the app drawer'),
+                  subtitle: const Text(
+                    'View apps that you have hidden from the app drawer',
+                  ),
                   secondary: const Icon(Icons.visibility),
                   value: _showHiddenApps,
                   onChanged: _toggleShowHiddenApps,
@@ -197,7 +212,9 @@ class _HomeSettingsState extends State<HomeSettings> {
                 ListTile(
                   leading: const Icon(Icons.info_outline),
                   title: const Text('Go Launcher 7'),
-                  subtitle: const Text('Version 1.0.0 (co.za.launcher3.swavoti)'),
+                  subtitle: const Text(
+                    'Version 1.0.0 (co.za.launcher3.swavoti)',
+                  ),
                 ),
               ],
             ),

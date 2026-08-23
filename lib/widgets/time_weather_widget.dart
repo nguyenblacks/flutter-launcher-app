@@ -48,7 +48,9 @@ class _TimeWeatherWidgetState extends State<TimeWeatherWidget> {
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('Remove Time & Weather?'),
-            content: const Text('You can re-enable this later in Home Settings.'),
+            content: const Text(
+              'You can re-enable this later in Home Settings.',
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
@@ -59,7 +61,10 @@ class _TimeWeatherWidgetState extends State<TimeWeatherWidget> {
                   Navigator.pop(context);
                   widget.onRemove();
                 },
-                child: const Text('Remove', style: TextStyle(color: Colors.red)),
+                child: const Text(
+                  'Remove',
+                  style: TextStyle(color: Colors.red),
+                ),
               ),
             ],
           ),
@@ -86,7 +91,9 @@ class _TimeWeatherWidgetState extends State<TimeWeatherWidget> {
                 Text(
                   '${_currentTime.day}/${_currentTime.month}/${_currentTime.year}',
                   style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.9),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withOpacity(0.9),
                     fontSize: 16,
                     fontWeight: FontWeight.w500,
                   ),

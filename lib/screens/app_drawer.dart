@@ -28,13 +28,17 @@ class _WorkspaceItemData {
   final String label;
   final String type;
 
-  _WorkspaceItemData({required this.packageName, required this.label, this.type = 'app'});
+  _WorkspaceItemData({
+    required this.packageName,
+    required this.label,
+    this.type = 'app',
+  });
 
   Map<String, dynamic> toMap() => {
-        'packageName': packageName,
-        'label': label,
-        'type': type,
-      };
+    'packageName': packageName,
+    'label': label,
+    'type': type,
+  };
 }
 
 class _AppDrawerState extends State<AppDrawer> {
@@ -123,7 +127,9 @@ class _AppDrawerState extends State<AppDrawer> {
                   height: 4,
                   margin: const EdgeInsets.only(bottom: 16),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.4),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurfaceVariant.withOpacity(0.4),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -140,7 +146,9 @@ class _AppDrawerState extends State<AppDrawer> {
                           )
                         : null,
                     filled: true,
-                    fillColor: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.5),
+                    fillColor: Theme.of(
+                      context,
+                    ).colorScheme.surfaceVariant.withOpacity(0.5),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(28),
                       borderSide: BorderSide.none,
@@ -148,13 +156,18 @@ class _AppDrawerState extends State<AppDrawer> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                if (_searchController.text.isEmpty && _filteredApps.length >= 4) ...[
+                if (_searchController.text.isEmpty &&
+                    _filteredApps.length >= 4) ...[
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8.0,
+                      vertical: 8,
+                    ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: _filteredApps.take(4).map((app) {
-                        final notificationCount = widget.notifications[app.packageName] ?? 0;
+                        final notificationCount =
+                            widget.notifications[app.packageName] ?? 0;
                         return Expanded(
                           child: _AppDrawerItem(
                             app: app,
@@ -188,18 +201,16 @@ class _AppDrawerState extends State<AppDrawer> {
                 crossAxisSpacing: 16,
                 childAspectRatio: 0.85,
               ),
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final app = _filteredApps[index];
-                  final notificationCount = widget.notifications[app.packageName] ?? 0;
-                  return _AppDrawerItem(
-                    app: app,
-                    notificationCount: notificationCount,
-                    onCloseDrawer: widget.onClose,
-                  );
-                },
-                childCount: _filteredApps.length,
-              ),
+              delegate: SliverChildBuilderDelegate((context, index) {
+                final app = _filteredApps[index];
+                final notificationCount =
+                    widget.notifications[app.packageName] ?? 0;
+                return _AppDrawerItem(
+                  app: app,
+                  notificationCount: notificationCount,
+                  onCloseDrawer: widget.onClose,
+                );
+              }, childCount: _filteredApps.length),
             ),
           const SliverToBoxAdapter(child: SizedBox(height: 24)),
         ],
@@ -223,7 +234,8 @@ class _AppDrawerItem extends StatefulWidget {
   State<_AppDrawerItem> createState() => _AppDrawerItemState();
 }
 
-class _AppDrawerItemState extends State<_AppDrawerItem> with AutomaticKeepAliveClientMixin {
+class _AppDrawerItemState extends State<_AppDrawerItem>
+    with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
 

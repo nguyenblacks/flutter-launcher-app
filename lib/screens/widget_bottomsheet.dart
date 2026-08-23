@@ -29,7 +29,7 @@ class _WidgetBottomSheetState extends State<WidgetBottomSheet> {
   Future<void> _loadWidgetsIncremental() async {
     final all = await LauncherService.getAllWidgets();
     if (!mounted) return;
-    
+
     setState(() {
       for (final w in all) {
         final pkg = w['providerPackage'] as String? ?? 'Unknown';
@@ -65,7 +65,10 @@ class _WidgetBottomSheetState extends State<WidgetBottomSheet> {
           const SizedBox(height: 20),
           Row(
             children: [
-              Text('Choose Widget', style: Theme.of(context).textTheme.headlineSmall),
+              Text(
+                'Choose Widget',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
               const Spacer(),
             ],
           ),
@@ -78,20 +81,30 @@ class _WidgetBottomSheetState extends State<WidgetBottomSheet> {
                     itemBuilder: (context, index) {
                       final pkg = _groupedWidgets.keys.elementAt(index);
                       final widgetsForApp = _groupedWidgets[pkg]!;
-                      
+
                       // Try to get app name from the first widget's label, or just use package name
-                      final firstLabel = widgetsForApp.first['label'] as String? ?? 'App';
-                      final appName = firstLabel.split(' ').first; // Rough heuristic for app name if package name is ugly
+                      final firstLabel =
+                          widgetsForApp.first['label'] as String? ?? 'App';
+                      final appName = firstLabel
+                          .split(' ')
+                          .first; // Rough heuristic for app name if package name is ugly
 
                       return Card(
                         margin: const EdgeInsets.symmetric(vertical: 6),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
                         child: ExpansionTile(
                           leading: FutureBuilder<AppInfo?>(
                             future: InstalledApps.getAppInfo(pkg),
                             builder: (context, snapshot) {
-                              if (snapshot.hasData && snapshot.data?.icon != null) {
-                                return Image.memory(snapshot.data!.icon!, width: 48, height: 48);
+                              if (snapshot.hasData &&
+                                  snapshot.data?.icon != null) {
+                                return Image.memory(
+                                  snapshot.data!.icon!,
+                                  width: 48,
+                                  height: 48,
+                                );
                               }
                               return Container(
                                 width: 48,
@@ -100,7 +113,11 @@ class _WidgetBottomSheetState extends State<WidgetBottomSheet> {
                                   color: cs.primaryContainer,
                                   borderRadius: BorderRadius.circular(12),
                                 ),
-                                child: Icon(Icons.widgets, color: cs.onPrimaryContainer, size: 28),
+                                child: Icon(
+                                  Icons.widgets,
+                                  color: cs.onPrimaryContainer,
+                                  size: 28,
+                                ),
                               );
                             },
                           ),
@@ -108,10 +125,15 @@ class _WidgetBottomSheetState extends State<WidgetBottomSheet> {
                             appName.isNotEmpty ? appName : pkg,
                             style: const TextStyle(fontWeight: FontWeight.w600),
                           ),
-                          subtitle: Text('${widgetsForApp.length} widgets', style: const TextStyle(fontSize: 12)),
+                          subtitle: Text(
+                            '${widgetsForApp.length} widgets',
+                            style: const TextStyle(fontSize: 12),
+                          ),
                           children: widgetsForApp.map((widgetData) {
-                            final label = widgetData['label'] as String? ?? 'Widget';
-                            final previewBytes = widgetData['preview'] as Uint8List?;
+                            final label =
+                                widgetData['label'] as String? ?? 'Widget';
+                            final previewBytes =
+                                widgetData['preview'] as Uint8List?;
 
                             final dragData = {
                               'type': 'widget_preview',
@@ -121,7 +143,10 @@ class _WidgetBottomSheetState extends State<WidgetBottomSheet> {
                             };
 
                             final widgetCard = ListTile(
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
+                              ),
                               leading: previewBytes != null
                                   ? ClipRRect(
                                       borderRadius: BorderRadius.circular(8),
@@ -133,8 +158,15 @@ class _WidgetBottomSheetState extends State<WidgetBottomSheet> {
                                       ),
                                     )
                                   : const Icon(Icons.crop_square, size: 32),
-                              title: Text(label, style: const TextStyle(fontSize: 14)),
-                              trailing: Icon(Icons.add_circle_outline, color: cs.primary, size: 20),
+                              title: Text(
+                                label,
+                                style: const TextStyle(fontSize: 14),
+                              ),
+                              trailing: Icon(
+                                Icons.add_circle_outline,
+                                color: cs.primary,
+                                size: 20,
+                              ),
                               onTap: () => widget.onWidgetSelected(widgetData),
                             );
 
@@ -147,12 +179,16 @@ class _WidgetBottomSheetState extends State<WidgetBottomSheet> {
                                 child: Opacity(
                                   opacity: 0.85,
                                   child: SizedBox(
-                                    width: MediaQuery.of(context).size.width - 64,
+                                    width:
+                                        MediaQuery.of(context).size.width - 64,
                                     child: Card(child: widgetCard),
                                   ),
                                 ),
                               ),
-                              childWhenDragging: Opacity(opacity: 0.3, child: widgetCard),
+                              childWhenDragging: Opacity(
+                                opacity: 0.3,
+                                child: widgetCard,
+                              ),
                               child: widgetCard,
                             );
                           }).toList(),

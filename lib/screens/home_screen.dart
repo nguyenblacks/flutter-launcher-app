@@ -40,32 +40,32 @@ class LauncherItem {
   });
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'type': type,
-        'packageName': packageName,
-        'className': className,
-        'appWidgetId': appWidgetId,
-        'x': x,
-        'y': y,
-        'spanX': spanX,
-        'spanY': spanY,
-        'page': page,
-        'label': label,
-      };
+    'id': id,
+    'type': type,
+    'packageName': packageName,
+    'className': className,
+    'appWidgetId': appWidgetId,
+    'x': x,
+    'y': y,
+    'spanX': spanX,
+    'spanY': spanY,
+    'page': page,
+    'label': label,
+  };
 
   factory LauncherItem.fromJson(Map<String, dynamic> json) => LauncherItem(
-        id: json['id'],
-        type: json['type'],
-        packageName: json['packageName'],
-        className: json['className'],
-        appWidgetId: json['appWidgetId'],
-        x: json['x'],
-        y: json['y'],
-        spanX: json['spanX'] ?? 1,
-        spanY: json['spanY'] ?? 1,
-        page: json['page'] ?? 0,
-        label: json['label'] ?? '',
-      );
+    id: json['id'],
+    type: json['type'],
+    packageName: json['packageName'],
+    className: json['className'],
+    appWidgetId: json['appWidgetId'],
+    x: json['x'],
+    y: json['y'],
+    spanX: json['spanX'] ?? 1,
+    spanY: json['spanY'] ?? 1,
+    page: json['page'] ?? 0,
+    label: json['label'] ?? '',
+  );
 }
 
 class HomeScreen extends StatefulWidget {
@@ -103,7 +103,10 @@ class HomeScreenState extends State<HomeScreen> {
 
   int get _totalPages {
     if (_items.isEmpty) return 1;
-    int maxPage = _items.fold<int>(0, (max, item) => item.page > max && item.page >= 0 ? item.page : max);
+    int maxPage = _items.fold<int>(
+      0,
+      (max, item) => item.page > max && item.page >= 0 ? item.page : max,
+    );
     return maxPage + 2; // extra blank page at end for adding new pages
   }
 
@@ -111,7 +114,9 @@ class HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     LauncherService.preloadWidgets();
-    _appCache = Map<String, AppInfo>.from(widget.appCache); // seed with pre-warmed cache
+    _appCache = Map<String, AppInfo>.from(
+      widget.appCache,
+    ); // seed with pre-warmed cache
     _loadItemsSync();
     _loadSettingsSync();
     _workspaceController = PageController(initialPage: 0);
@@ -129,13 +134,30 @@ class HomeScreenState extends State<HomeScreen> {
 
   void _loadItemsSync() {
     final data = widget.prefs.getStringList('launcher_items') ?? [];
-    final loadedItems = data.map((item) => LauncherItem.fromJson(jsonDecode(item))).toList();
-    
+    final loadedItems = data
+        .map((item) => LauncherItem.fromJson(jsonDecode(item)))
+        .toList();
+
     if (!loadedItems.any((i) => i.page == -1)) {
-       final common = ['com.google.android.dialer', 'com.google.android.apps.messaging', 'com.android.chrome', 'com.google.android.camera'];
-       for (int i = 0; i < 4; i++) {
-         loadedItems.add(LauncherItem(id: 'dock_$i', type: 'app', packageName: common[i], label: 'App', x: i, y: 0, page: -1));
-       }
+      final common = [
+        'com.google.android.dialer',
+        'com.google.android.apps.messaging',
+        'com.android.chrome',
+        'com.google.android.camera',
+      ];
+      for (int i = 0; i < 4; i++) {
+        loadedItems.add(
+          LauncherItem(
+            id: 'dock_$i',
+            type: 'app',
+            packageName: common[i],
+            label: 'App',
+            x: i,
+            y: 0,
+            page: -1,
+          ),
+        );
+      }
     }
     _items = loadedItems;
   }
@@ -152,8 +174,6 @@ class HomeScreenState extends State<HomeScreen> {
     final data = _items.map((item) => jsonEncode(item.toJson())).toList();
     await prefs.setStringList('launcher_items', data);
   }
-
-
 
   void _showWorkspaceMenu() {
     showModalBottomSheet(
@@ -173,7 +193,9 @@ class HomeScreenState extends State<HomeScreen> {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.4),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurfaceVariant.withOpacity(0.4),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -188,7 +210,9 @@ class HomeScreenState extends State<HomeScreen> {
                       Navigator.pop(context);
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (context) => const WallpaperPage()),
+                        MaterialPageRoute(
+                          builder: (context) => const WallpaperPage(),
+                        ),
                       );
                     },
                   ),
@@ -207,7 +231,9 @@ class HomeScreenState extends State<HomeScreen> {
                       Navigator.pop(context);
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (context) => const HomeSettings()),
+                        MaterialPageRoute(
+                          builder: (context) => const HomeSettings(),
+                        ),
                       ).then((_) {
                         widget.onSettingsChanged();
                         setState(() {
@@ -300,21 +326,27 @@ class HomeScreenState extends State<HomeScreen> {
     for (int y = 0; y < _rows; y++) {
       for (int x = 0; x < _columns; x++) {
         // Check if any item occupies (x, y) on _currentWorkspacePage
-        final isOccupied = _items.any((item) =>
-            item.page == _currentWorkspacePage &&
-            x >= item.x && x < item.x + item.spanX &&
-            y >= item.y && y < item.y + item.spanY);
+        final isOccupied = _items.any(
+          (item) =>
+              item.page == _currentWorkspacePage &&
+              x >= item.x &&
+              x < item.x + item.spanX &&
+              y >= item.y &&
+              y < item.y + item.spanY,
+        );
 
         if (!isOccupied) {
-          _addNewItem(LauncherItem(
-            id: DateTime.now().millisecondsSinceEpoch.toString(),
-            type: 'app',
-            packageName: packageName,
-            label: label,
-            x: x,
-            y: y,
-            page: _currentWorkspacePage,
-          ));
+          _addNewItem(
+            LauncherItem(
+              id: DateTime.now().millisecondsSinceEpoch.toString(),
+              type: 'app',
+              packageName: packageName,
+              label: label,
+              x: x,
+              y: y,
+              page: _currentWorkspacePage,
+            ),
+          );
           return;
         }
       }
@@ -329,7 +361,7 @@ class HomeScreenState extends State<HomeScreen> {
     // Try to find a 4x2 space on the current page
     final spanX = 4;
     final spanY = 2;
-    
+
     for (int y = 0; y <= _rows - spanY; y++) {
       for (int x = 0; x <= _columns - spanX; x++) {
         // Check if any item occupies any cell in this span
@@ -337,8 +369,10 @@ class HomeScreenState extends State<HomeScreen> {
         for (final item in _items) {
           if (item.page == _currentWorkspacePage) {
             // Check overlap
-            if (x < item.x + item.spanX && x + spanX > item.x &&
-                y < item.y + item.spanY && y + spanY > item.y) {
+            if (x < item.x + item.spanX &&
+                x + spanX > item.x &&
+                y < item.y + item.spanY &&
+                y + spanY > item.y) {
               isOccupied = true;
               break;
             }
@@ -346,28 +380,34 @@ class HomeScreenState extends State<HomeScreen> {
         }
 
         if (!isOccupied) {
-          _addNewItem(LauncherItem(
-            id: DateTime.now().millisecondsSinceEpoch.toString(),
-            type: 'widget',
-            packageName: widgetData['providerPackage'],
-            className: widgetData['providerClass'],
-            appWidgetId: widgetId,
-            x: x,
-            y: y,
-            spanX: spanX,
-            spanY: spanY,
-            page: _currentWorkspacePage,
-            label: widgetData['label'],
-          ));
+          _addNewItem(
+            LauncherItem(
+              id: DateTime.now().millisecondsSinceEpoch.toString(),
+              type: 'widget',
+              packageName: widgetData['providerPackage'],
+              className: widgetData['providerClass'],
+              appWidgetId: widgetId,
+              x: x,
+              y: y,
+              spanX: spanX,
+              spanY: spanY,
+              page: _currentWorkspacePage,
+              label: widgetData['label'],
+            ),
+          );
           return;
         }
       }
     }
-    
+
     // If no space, we can't place it. Should probably delete the widget ID to prevent leaks.
     LauncherService.deleteWidgetId(widgetId);
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Not enough space for this widget (requires 4x2). Try a blank page!')),
+      const SnackBar(
+        content: Text(
+          'Not enough space for this widget (requires 4x2). Try a blank page!',
+        ),
+      ),
     );
   }
 
@@ -376,7 +416,8 @@ class HomeScreenState extends State<HomeScreen> {
     final statusBarHeight = MediaQuery.of(context).padding.top;
 
     return GestureDetector(
-      onLongPress: _showWorkspaceMenu, // open workspace menu for wallpapers, widgets, settings
+      onLongPress:
+          _showWorkspaceMenu, // open workspace menu for wallpapers, widgets, settings
       child: Container(
         color: Colors.transparent, // Capture taps across screen
         child: Column(
@@ -408,24 +449,33 @@ class HomeScreenState extends State<HomeScreen> {
                             notification.overscroll < -50 &&
                             !_isNavigatingToDiscover) {
                           _isNavigatingToDiscover = true;
-                          Navigator.of(context).push(
-                            PageRouteBuilder(
-                              pageBuilder: (_, __, ___) => const DiscoverNewsPage(),
-                              transitionsBuilder: (_, animation, __, child) {
-                                return SlideTransition(
-                                  position: Tween<Offset>(
-                                    begin: const Offset(-1, 0),
-                                    end: Offset.zero,
-                                  ).animate(CurvedAnimation(
-                                    parent: animation,
-                                    curve: Curves.easeOutCubic,
-                                  )),
-                                  child: child,
-                                );
-                              },
-                              transitionDuration: const Duration(milliseconds: 280),
-                            ),
-                          ).then((_) => _isNavigatingToDiscover = false);
+                          Navigator.of(context)
+                              .push(
+                                PageRouteBuilder(
+                                  pageBuilder: (_, __, ___) =>
+                                      const DiscoverNewsPage(),
+                                  transitionsBuilder:
+                                      (_, animation, __, child) {
+                                        return SlideTransition(
+                                          position:
+                                              Tween<Offset>(
+                                                begin: const Offset(-1, 0),
+                                                end: Offset.zero,
+                                              ).animate(
+                                                CurvedAnimation(
+                                                  parent: animation,
+                                                  curve: Curves.easeOutCubic,
+                                                ),
+                                              ),
+                                          child: child,
+                                        );
+                                      },
+                                  transitionDuration: const Duration(
+                                    milliseconds: 280,
+                                  ),
+                                ),
+                              )
+                              .then((_) => _isNavigatingToDiscover = false);
                         }
                         return false;
                       },
@@ -438,166 +488,235 @@ class HomeScreenState extends State<HomeScreen> {
                         },
                         itemBuilder: (context, index) {
                           final pageIndex = index;
-                          final pageItems = _items.where((i) => i.page == pageIndex).toList();
+                          final pageItems = _items
+                              .where((i) => i.page == pageIndex)
+                              .toList();
 
+                          return Stack(
+                            children: [
+                              // Grid lines or drag targets
+                              for (int y = 0; y < _rows; y++)
+                                for (int x = 0; x < _columns; x++)
+                                  Positioned(
+                                    left: x * cellWidth,
+                                    top: y * cellHeight,
+                                    width: cellWidth,
+                                    height: cellHeight,
+                                    child: DragTarget<Map<String, dynamic>>(
+                                      onWillAcceptWithDetails: (details) =>
+                                          true,
+                                      onAcceptWithDetails: (details) {
+                                        final data = details.data;
+                                        final spanX =
+                                            data['spanX'] as int? ?? 1;
+                                        final spanY =
+                                            data['spanY'] as int? ?? 1;
+                                        final targetX = x.clamp(
+                                          0,
+                                          _columns - spanX,
+                                        );
+                                        final targetY = y.clamp(
+                                          0,
+                                          _rows - spanY,
+                                        );
 
-                        return Stack(
-                          children: [
-                            // Grid lines or drag targets
-                            for (int y = 0; y < _rows; y++)
-                              for (int x = 0; x < _columns; x++)
-                                Positioned(
-                                  left: x * cellWidth,
-                                  top: y * cellHeight,
-                                  width: cellWidth,
-                                  height: cellHeight,
-                                  child: DragTarget<Map<String, dynamic>>(
-                                    onWillAcceptWithDetails: (details) => true,
-                                    onAcceptWithDetails: (details) {
-                                      final data = details.data;
-                                      final spanX = data['spanX'] as int? ?? 1;
-                                      final spanY = data['spanY'] as int? ?? 1;
-                                      final targetX = x.clamp(0, _columns - spanX);
-                                      final targetY = y.clamp(0, _rows - spanY);
+                                        if (data['id'] != null) {
+                                          // Move existing item
+                                          final itemId = data['id'] as String;
+                                          setState(() {
+                                            final item = _items.firstWhere(
+                                              (i) => i.id == itemId,
+                                            );
+                                            item.x = targetX;
+                                            item.y = targetY;
+                                            item.page = pageIndex;
+                                          });
+                                          _saveItems();
+                                        } else if (data['type'] == 'app') {
+                                          // Add new app
+                                          _addNewItem(
+                                            LauncherItem(
+                                              id: DateTime.now()
+                                                  .millisecondsSinceEpoch
+                                                  .toString(),
+                                              type: 'app',
+                                              packageName: data['packageName'],
+                                              label: data['label'],
+                                              x: targetX,
+                                              y: targetY,
+                                              page: pageIndex,
+                                            ),
+                                          );
+                                        } else if (data['type'] ==
+                                            'widget_preview') {
+                                          LauncherService.allocateWidgetId().then((
+                                            id,
+                                          ) {
+                                            if (id != -1) {
+                                              LauncherService.bindWidget(
+                                                id,
+                                                data['providerPackage'],
+                                                data['providerClass'],
+                                              ).then((success) {
+                                                if (success) {
+                                                  _addNewItem(
+                                                    LauncherItem(
+                                                      id: DateTime.now()
+                                                          .millisecondsSinceEpoch
+                                                          .toString(),
+                                                      type: 'widget',
+                                                      packageName:
+                                                          data['providerPackage'],
+                                                      className:
+                                                          data['providerClass'],
+                                                      appWidgetId: id,
+                                                      x: targetX,
+                                                      y: targetY,
+                                                      spanX: 4,
+                                                      spanY: 2,
+                                                      page: pageIndex,
+                                                      label: data['label'],
+                                                    ),
+                                                  );
+                                                }
+                                              });
+                                            }
+                                          });
+                                        }
+                                      },
+                                      builder:
+                                          (
+                                            context,
+                                            candidateData,
+                                            rejectedData,
+                                          ) {
+                                            return Container(
+                                              margin: const EdgeInsets.all(4),
+                                              decoration: BoxDecoration(
+                                                border: Border.all(
+                                                  color:
+                                                      candidateData.isNotEmpty
+                                                      ? Theme.of(context)
+                                                            .colorScheme
+                                                            .primary
+                                                            .withOpacity(0.5)
+                                                      : Colors.transparent,
+                                                  width: 2,
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                              ),
+                                            );
+                                          },
+                                    ),
+                                  ),
 
-                                      if (data['id'] != null) {
-                                        // Move existing item
-                                        final itemId = data['id'] as String;
-                                        setState(() {
-                                          final item = _items.firstWhere((i) => i.id == itemId);
-                                          item.x = targetX;
-                                          item.y = targetY;
-                                          item.page = pageIndex;
-                                        });
-                                        _saveItems();
-                                      } else if (data['type'] == 'app') {
-                                        // Add new app
-                                        _addNewItem(LauncherItem(
-                                          id: DateTime.now().millisecondsSinceEpoch.toString(),
-                                          type: 'app',
-                                          packageName: data['packageName'],
-                                          label: data['label'],
-                                          x: targetX,
-                                          y: targetY,
-                                          page: pageIndex,
-                                        ));
-                                      } else if (data['type'] == 'widget_preview') {
-                                        LauncherService.allocateWidgetId().then((id) {
-                                          if (id != -1) {
-                                            LauncherService.bindWidget(
-                                              id,
-                                              data['providerPackage'],
-                                              data['providerClass'],
-                                            ).then((success) {
-                                              if (success) {
-                                                _addNewItem(LauncherItem(
-                                                  id: DateTime.now().millisecondsSinceEpoch.toString(),
-                                                  type: 'widget',
-                                                  packageName: data['providerPackage'],
-                                                  className: data['providerClass'],
-                                                  appWidgetId: id,
-                                                  x: targetX,
-                                                  y: targetY,
-                                                  spanX: 4,
-                                                  spanY: 2,
-                                                  page: pageIndex,
-                                                  label: data['label'],
-                                                ));
-                                              }
-                                            });
-                                          }
-                                        });
-                                      }
-                                    },
-                                    builder: (context, candidateData, rejectedData) {
-                                      return Container(
-                                        margin: const EdgeInsets.all(4),
-                                        decoration: BoxDecoration(
-                                          border: Border.all(
-                                            color: candidateData.isNotEmpty
-                                                ? Theme.of(context).colorScheme.primary.withOpacity(0.5)
-                                                : Colors.transparent,
-                                            width: 2,
-                                          ),
-                                          borderRadius: BorderRadius.circular(12),
+                              // Placed Items on this page
+                              ...pageItems.map((item) {
+                                return Positioned(
+                                  left: item.x * cellWidth,
+                                  top: item.y * cellHeight,
+                                  width: item.spanX * cellWidth,
+                                  height: item.spanY * cellHeight,
+                                  child:
+                                      LongPressDraggable<Map<String, dynamic>>(
+                                        data: item.toJson(),
+                                        delay: const Duration(
+                                          milliseconds: 150,
                                         ),
+                                        onDragStarted: () =>
+                                            setState(() => _isDragging = true),
+                                        onDragEnd: (_) =>
+                                            setState(() => _isDragging = false),
+                                        onDraggableCanceled: (_, __) =>
+                                            setState(() => _isDragging = false),
+                                        feedback: Material(
+                                          color: Colors.transparent,
+                                          child: Opacity(
+                                            opacity: 0.7,
+                                            child: _buildItemContent(
+                                              item,
+                                              cellWidth,
+                                              cellHeight,
+                                            ),
+                                          ),
+                                        ),
+                                        childWhenDragging:
+                                            const SizedBox.shrink(),
+                                        child: GestureDetector(
+                                          onLongPress: () =>
+                                              _showItemContextMenu(item),
+                                          child: _buildItemContent(
+                                            item,
+                                            cellWidth,
+                                            cellHeight,
+                                          ),
+                                        ),
+                                      ),
+                                );
+                              }),
+
+                              // Edge drag to previous page
+                              if (_isDragging && pageIndex > 0)
+                                Positioned(
+                                  left: 0,
+                                  top: 0,
+                                  bottom: 0,
+                                  width: 24,
+                                  child: DragTarget<Map<String, dynamic>>(
+                                    onWillAcceptWithDetails: (_) {
+                                      _workspaceController.previousPage(
+                                        duration: const Duration(
+                                          milliseconds: 300,
+                                        ),
+                                        curve: Curves.easeInOut,
+                                      );
+                                      return false;
+                                    },
+                                    builder: (context, candidateData, _) {
+                                      return Container(
+                                        color: candidateData.isNotEmpty
+                                            ? Colors.white.withOpacity(0.2)
+                                            : Colors.transparent,
                                       );
                                     },
                                   ),
                                 ),
 
-                            // Placed Items on this page
-                            ...pageItems.map((item) {
-                              return Positioned(
-                                left: item.x * cellWidth,
-                                top: item.y * cellHeight,
-                                width: item.spanX * cellWidth,
-                                height: item.spanY * cellHeight,
-                                child: LongPressDraggable<Map<String, dynamic>>(
-                                  data: item.toJson(),
-                                  delay: const Duration(milliseconds: 150),
-                                  onDragStarted: () => setState(() => _isDragging = true),
-                                  onDragEnd: (_) => setState(() => _isDragging = false),
-                                  onDraggableCanceled: (_, __) => setState(() => _isDragging = false),
-                                  feedback: Material(
-                                    color: Colors.transparent,
-                                    child: Opacity(
-                                      opacity: 0.7,
-                                      child: _buildItemContent(item, cellWidth, cellHeight),
-                                    ),
+                              // Edge drag to next page
+                              if (_isDragging && pageIndex < _totalPages - 1)
+                                Positioned(
+                                  right: 0,
+                                  top: 0,
+                                  bottom: 0,
+                                  width: 24,
+                                  child: DragTarget<Map<String, dynamic>>(
+                                    onWillAcceptWithDetails: (_) {
+                                      _workspaceController.nextPage(
+                                        duration: const Duration(
+                                          milliseconds: 300,
+                                        ),
+                                        curve: Curves.easeInOut,
+                                      );
+                                      return false;
+                                    },
+                                    builder: (context, candidateData, _) {
+                                      return Container(
+                                        color: candidateData.isNotEmpty
+                                            ? Colors.white.withOpacity(0.2)
+                                            : Colors.transparent,
+                                      );
+                                    },
                                   ),
-                                  childWhenDragging: const SizedBox.shrink(),
-                                  child: GestureDetector(
-                                    onLongPress: () => _showItemContextMenu(item),
-                                    child: _buildItemContent(item, cellWidth, cellHeight),
-                                  ),
                                 ),
-                              );
-                            }),
-
-                            // Edge drag to previous page
-                            if (_isDragging && pageIndex > 0)
-                              Positioned(
-                                left: 0,
-                                top: 0,
-                                bottom: 0,
-                                width: 24,
-                                child: DragTarget<Map<String, dynamic>>(
-                                  onWillAcceptWithDetails: (_) {
-                                    _workspaceController.previousPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
-                                    return false;
-                                  },
-                                  builder: (context, candidateData, _) {
-                                    return Container(color: candidateData.isNotEmpty ? Colors.white.withOpacity(0.2) : Colors.transparent);
-                                  },
-                                ),
-                              ),
-
-                            // Edge drag to next page
-                            if (_isDragging && pageIndex < _totalPages - 1)
-                              Positioned(
-                                right: 0,
-                                top: 0,
-                                bottom: 0,
-                                width: 24,
-                                child: DragTarget<Map<String, dynamic>>(
-                                  onWillAcceptWithDetails: (_) {
-                                    _workspaceController.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
-                                    return false;
-                                  },
-                                  builder: (context, candidateData, _) {
-                                    return Container(color: candidateData.isNotEmpty ? Colors.white.withOpacity(0.2) : Colors.transparent);
-                                  },
-                                ),
-                              ),
-                          ],
-                        );
+                            ],
+                          );
                         },
                       ),
                     );
                   },
                 ),
-              )
+              ),
             ),
             // Workspace Page Indicator (At bottom)
             // Shows one extra dot for the Discover page (left of page 0)
@@ -610,17 +729,31 @@ class HomeScreenState extends State<HomeScreen> {
                   onTap: () {
                     if (!_isNavigatingToDiscover) {
                       _isNavigatingToDiscover = true;
-                      Navigator.of(context).push(
-                        PageRouteBuilder(
-                          pageBuilder: (_, _, _) => const DiscoverNewsPage(),
-                          transitionsBuilder: (_, animation, _, child) => SlideTransition(
-                            position: Tween<Offset>(begin: const Offset(-1, 0), end: Offset.zero)
-                                .animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
-                            child: child,
-                          ),
-                          transitionDuration: const Duration(milliseconds: 280),
-                        ),
-                      ).then((_) => _isNavigatingToDiscover = false);
+                      Navigator.of(context)
+                          .push(
+                            PageRouteBuilder(
+                              pageBuilder: (_, _, _) =>
+                                  const DiscoverNewsPage(),
+                              transitionsBuilder: (_, animation, _, child) =>
+                                  SlideTransition(
+                                    position:
+                                        Tween<Offset>(
+                                          begin: const Offset(-1, 0),
+                                          end: Offset.zero,
+                                        ).animate(
+                                          CurvedAnimation(
+                                            parent: animation,
+                                            curve: Curves.easeOutCubic,
+                                          ),
+                                        ),
+                                    child: child,
+                                  ),
+                              transitionDuration: const Duration(
+                                milliseconds: 280,
+                              ),
+                            ),
+                          )
+                          .then((_) => _isNavigatingToDiscover = false);
                     }
                   },
                   child: Container(
@@ -670,7 +803,9 @@ class HomeScreenState extends State<HomeScreen> {
                     margin: const EdgeInsets.symmetric(vertical: 16),
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: isHovered ? Colors.red.withOpacity(0.85) : Colors.black.withOpacity(0.5),
+                      color: isHovered
+                          ? Colors.red.withOpacity(0.85)
+                          : Colors.black.withOpacity(0.5),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
@@ -691,7 +826,7 @@ class HomeScreenState extends State<HomeScreen> {
                 builder: (context, constraints) {
                   final cellWidth = constraints.maxWidth / 4;
                   final dockItems = _items.where((i) => i.page == -1).toList();
-                  
+
                   return Stack(
                     children: [
                       // Drop targets for the 4 dock slots
@@ -707,22 +842,27 @@ class HomeScreenState extends State<HomeScreen> {
                               final data = details.data;
                               if (data['id'] != null) {
                                 setState(() {
-                                  final item = _items.firstWhere((i) => i.id == data['id']);
+                                  final item = _items.firstWhere(
+                                    (i) => i.id == data['id'],
+                                  );
                                   item.x = x;
                                   item.y = 0;
                                   item.page = -1;
                                 });
                                 _saveItems();
                               } else if (data['type'] == 'app') {
-                                _addNewItem(LauncherItem(
-                                  id: DateTime.now().millisecondsSinceEpoch.toString(),
-                                  type: 'app',
-                                  packageName: data['packageName'],
-                                  label: data['label'],
-                                  x: x,
-                                  y: 0,
-                                  page: -1,
-                                ));
+                                _addNewItem(
+                                  LauncherItem(
+                                    id: DateTime.now().millisecondsSinceEpoch
+                                        .toString(),
+                                    type: 'app',
+                                    packageName: data['packageName'],
+                                    label: data['label'],
+                                    x: x,
+                                    y: 0,
+                                    page: -1,
+                                  ),
+                                );
                               }
                             },
                             builder: (context, candidateData, rejectedData) {
@@ -731,7 +871,11 @@ class HomeScreenState extends State<HomeScreen> {
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(16),
                                   border: Border.all(
-                                    color: candidateData.isNotEmpty ? Theme.of(context).colorScheme.primary.withOpacity(0.5) : Colors.transparent,
+                                    color: candidateData.isNotEmpty
+                                        ? Theme.of(
+                                            context,
+                                          ).colorScheme.primary.withOpacity(0.5)
+                                        : Colors.transparent,
                                     width: 2,
                                   ),
                                 ),
@@ -739,7 +883,7 @@ class HomeScreenState extends State<HomeScreen> {
                             },
                           ),
                         ),
-                      
+
                       // Dock Items
                       ...dockItems.map((item) {
                         return Positioned(
@@ -750,16 +894,23 @@ class HomeScreenState extends State<HomeScreen> {
                           child: LongPressDraggable<Map<String, dynamic>>(
                             data: item.toJson(),
                             delay: const Duration(milliseconds: 150),
-                            onDragStarted: () => setState(() => _isDragging = true),
-                            onDragEnd: (_) => setState(() => _isDragging = false),
-                            onDraggableCanceled: (_, __) => setState(() => _isDragging = false),
+                            onDragStarted: () =>
+                                setState(() => _isDragging = true),
+                            onDragEnd: (_) =>
+                                setState(() => _isDragging = false),
+                            onDraggableCanceled: (_, __) =>
+                                setState(() => _isDragging = false),
                             feedback: Material(
                               color: Colors.transparent,
-                              child: Opacity(opacity: 0.7, child: _buildItemContent(item, cellWidth, 90)),
+                              child: Opacity(
+                                opacity: 0.7,
+                                child: _buildItemContent(item, cellWidth, 90),
+                              ),
                             ),
                             childWhenDragging: const SizedBox.shrink(),
                             child: GestureDetector(
-                              onTap: () => LauncherService.startApp(item.packageName),
+                              onTap: () =>
+                                  LauncherService.startApp(item.packageName),
                               onLongPress: () => _showItemContextMenu(item),
                               child: _buildItemContent(item, cellWidth, 90),
                             ),
@@ -778,13 +929,15 @@ class HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildItemContent(LauncherItem item, double cellWidth, double cellHeight) {
+  Widget _buildItemContent(
+    LauncherItem item,
+    double cellWidth,
+    double cellHeight,
+  ) {
     if (item.type == 'widget' && item.appWidgetId != null) {
       return Container(
         margin: const EdgeInsets.all(4),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-        ),
+        decoration: BoxDecoration(borderRadius: BorderRadius.circular(16)),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16),
           child: AndroidView(
@@ -813,11 +966,7 @@ class HomeScreenState extends State<HomeScreen> {
                 Stack(
                   children: [
                     if (app.icon != null)
-                      Image.memory(
-                        app.icon!,
-                        width: 48,
-                        height: 48,
-                      )
+                      Image.memory(app.icon!, width: 48, height: 48)
                     else
                       const Icon(Icons.android, size: 48),
                     if (notificationCount > 0)
@@ -878,17 +1027,25 @@ class HomeScreenState extends State<HomeScreen> {
       builder: (context) {
         return Dialog(
           backgroundColor: Theme.of(context).colorScheme.surface,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                   child: Text(
                     item.label.isNotEmpty ? item.label : 'Item Actions',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
                     textAlign: TextAlign.center,
                   ),
                 ),
@@ -919,8 +1076,14 @@ class HomeScreenState extends State<HomeScreen> {
                     },
                   ),
                   ListTile(
-                    leading: const Icon(Icons.delete_forever, color: Colors.red),
-                    title: const Text('Uninstall', style: TextStyle(color: Colors.red)),
+                    leading: const Icon(
+                      Icons.delete_forever,
+                      color: Colors.red,
+                    ),
+                    title: const Text(
+                      'Uninstall',
+                      style: TextStyle(color: Colors.red),
+                    ),
                     onTap: () {
                       Navigator.pop(context);
                       LauncherService.uninstallApp(item.packageName);
@@ -1031,4 +1194,3 @@ class HomeScreenState extends State<HomeScreen> {
     );
   }
 }
-

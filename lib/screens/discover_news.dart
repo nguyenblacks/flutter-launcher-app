@@ -23,7 +23,9 @@ class _DiscoverNewsPageState extends State<DiscoverNewsPage> {
   Future<void> _initWebView() async {
     final prefs = await SharedPreferences.getInstance();
     final provider = prefs.getString('feed_provider') ?? 'msn';
-    final url = provider == 'yahoo' ? 'https://www.yahoo.com' : 'https://www.msn.com';
+    final url = provider == 'yahoo'
+        ? 'https://www.yahoo.com'
+        : 'https://www.msn.com';
 
     _webViewController = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
@@ -33,19 +35,21 @@ class _DiscoverNewsPageState extends State<DiscoverNewsPage> {
             if (mounted) setState(() => _isLoading = progress < 100);
           },
           onPageStarted: (_) {
-            if (mounted) setState(() {
-              _isLoading = true;
-              _hasError = false;
-            });
+            if (mounted)
+              setState(() {
+                _isLoading = true;
+                _hasError = false;
+              });
           },
           onPageFinished: (_) {
             if (mounted) setState(() => _isLoading = false);
           },
           onWebResourceError: (_) {
-            if (mounted) setState(() {
-              _isLoading = false;
-              _hasError = true;
-            });
+            if (mounted)
+              setState(() {
+                _isLoading = false;
+                _hasError = true;
+              });
           },
         ),
       )
@@ -70,7 +74,11 @@ class _DiscoverNewsPageState extends State<DiscoverNewsPage> {
                     const SizedBox(height: 16),
                     const Text(
                       'No Internet Connection',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     ElevatedButton(

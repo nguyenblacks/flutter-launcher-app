@@ -48,13 +48,19 @@ class _WallpaperPageState extends State<WallpaperPage> {
   Future<void> _loadWallpapers() async {
     try {
       final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
-      final imagePaths = manifest.listAssets()
-          .where((String key) =>
-              key.startsWith('assets/wallpapers/') &&
-              (key.endsWith('.jpg') || key.endsWith('.jpeg') ||
-               key.endsWith('.png') || key.endsWith('.webp')))
-          .toList()
-          ..sort(); // consistent order
+      final imagePaths =
+          manifest
+              .listAssets()
+              .where(
+                (String key) =>
+                    key.startsWith('assets/wallpapers/') &&
+                    (key.endsWith('.jpg') ||
+                        key.endsWith('.jpeg') ||
+                        key.endsWith('.png') ||
+                        key.endsWith('.webp')),
+              )
+              .toList()
+            ..sort(); // consistent order
 
       if (mounted) {
         setState(() {
@@ -111,12 +117,13 @@ class _WallpaperPageState extends State<WallpaperPage> {
                   child: GridView.builder(
                     controller: scrollController,
                     padding: const EdgeInsets.all(8.0),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 3,
-                      crossAxisSpacing: 8,
-                      mainAxisSpacing: 8,
-                      childAspectRatio: 9 / 16,
-                    ),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 3,
+                          crossAxisSpacing: 8,
+                          mainAxisSpacing: 8,
+                          childAspectRatio: 9 / 16,
+                        ),
                     itemCount: _wallpapers.length,
                     itemBuilder: (context, index) {
                       final path = _wallpapers[index];
@@ -130,7 +137,8 @@ class _WallpaperPageState extends State<WallpaperPage> {
                           child: Image.asset(
                             path,
                             fit: BoxFit.cover,
-                            cacheWidth: 300, // Important: heavily reduces memory & decoding time
+                            cacheWidth:
+                                300, // Important: heavily reduces memory & decoding time
                           ),
                         ),
                       );
@@ -188,19 +196,23 @@ class _WallpaperPageState extends State<WallpaperPage> {
 
   Future<void> _setWallpaper(String assetPath, int type) async {
     Navigator.pop(context); // Close action sheet
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Setting wallpaper...')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Setting wallpaper...')));
 
     try {
       final ByteData data = await rootBundle.load(assetPath);
       final Uint8List bytes = data.buffer.asUint8List();
       final success = await LauncherService.setWallpaper(bytes, type);
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(success ? 'Wallpaper set successfully!' : 'Failed to set wallpaper.'),
+            content: Text(
+              success
+                  ? 'Wallpaper set successfully!'
+                  : 'Failed to set wallpaper.',
+            ),
             backgroundColor: success ? Colors.green : Colors.red,
           ),
         );
@@ -217,7 +229,7 @@ class _WallpaperPageState extends State<WallpaperPage> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    
+
     return Scaffold(
       backgroundColor: colorScheme.surface,
       appBar: AppBar(
@@ -238,13 +250,20 @@ class _WallpaperPageState extends State<WallpaperPage> {
                 children: [
                   const CircularProgressIndicator(),
                   const SizedBox(height: 16),
-                  Text('Loading wallpapers...', style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
+                  Text(
+                    'Loading wallpapers...',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+                  ),
                 ],
               ),
             )
           : _wallpapers.isEmpty
-              ? const Center(child: Text('No wallpapers found in assets/wallpapers/'))
-              : Column(
+          ? const Center(
+              child: Text('No wallpapers found in assets/wallpapers/'),
+            )
+          : Column(
               children: [
                 const SizedBox(height: 32),
                 Row(
@@ -269,7 +288,14 @@ class _WallpaperPageState extends State<WallpaperPage> {
                           ),
                         ),
                         onPressed: () {
-                          Navigator.push(context, MaterialPageRoute(builder: (_) => EditIconsPage(backgroundWallpaperPath: _currentPreview)));
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => EditIconsPage(
+                                backgroundWallpaperPath: _currentPreview,
+                              ),
+                            ),
+                          );
                         },
                       ),
                       const SizedBox(height: 16),
@@ -294,7 +320,7 @@ class _WallpaperPageState extends State<WallpaperPage> {
 
   Widget _buildPreviewScreen(String label, {required bool isLockScreen}) {
     final colorScheme = Theme.of(context).colorScheme;
-    
+
     return Column(
       children: [
         Text(
@@ -383,7 +409,7 @@ class _WallpaperPageState extends State<WallpaperPage> {
                           }).toList(),
                   ),
                 ),
-              ]
+              ],
             ],
           ),
         ),

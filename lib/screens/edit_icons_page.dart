@@ -12,7 +12,12 @@ class EditIconsPage extends StatefulWidget {
 
 class _EditIconsPageState extends State<EditIconsPage> {
   String _selectedShape = 'Circle';
-  final List<String> _shapes = ['Circle', 'Squircle', 'Rounded Rectangle', 'Teardrop'];
+  final List<String> _shapes = [
+    'Circle',
+    'Squircle',
+    'Rounded Rectangle',
+    'Teardrop',
+  ];
 
   @override
   void initState() {
@@ -84,7 +89,7 @@ class _EditIconsPageState extends State<EditIconsPage> {
             )
           else
             Container(color: Theme.of(context).colorScheme.surface),
-          
+
           SafeArea(
             child: Column(
               children: [
@@ -103,13 +108,20 @@ class _EditIconsPageState extends State<EditIconsPage> {
                 Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surface.withOpacity(0.9),
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.surface.withOpacity(0.9),
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(32),
+                    ),
                   ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text('Select Icon Shape', style: Theme.of(context).textTheme.titleLarge),
+                      Text(
+                        'Select Icon Shape',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
                       const SizedBox(height: 16),
                       Wrap(
                         spacing: 12,

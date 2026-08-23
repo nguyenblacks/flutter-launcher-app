@@ -3,17 +3,25 @@ import 'dart:typed_data';
 
 class LauncherService {
   static const _systemChannel = MethodChannel('co.za.launcher3.swavoti/system');
-  static const _widgetChannel = MethodChannel('co.za.launcher3.swavoti/widgets');
-  static const _notificationChannel = EventChannel('co.za.launcher3.swavoti/notifications');
+  static const _widgetChannel = MethodChannel(
+    'co.za.launcher3.swavoti/widgets',
+  );
+  static const _notificationChannel = EventChannel(
+    'co.za.launcher3.swavoti/notifications',
+  );
 
   static List<Map<String, dynamic>>? _cachedWidgets;
 
   static Future<void> preloadWidgets() async {
     if (_cachedWidgets != null) return;
     try {
-      final List<dynamic>? widgets = await _widgetChannel.invokeMethod('getAllWidgets');
+      final List<dynamic>? widgets = await _widgetChannel.invokeMethod(
+        'getAllWidgets',
+      );
       if (widgets != null) {
-        _cachedWidgets = widgets.map((w) => Map<String, dynamic>.from(w as Map)).toList();
+        _cachedWidgets = widgets
+            .map((w) => Map<String, dynamic>.from(w as Map))
+            .toList();
       }
     } catch (e) {
       print('Error preloading widgets: $e');
@@ -23,7 +31,9 @@ class LauncherService {
   // System Actions
   static Future<void> uninstallApp(String packageName) async {
     try {
-      await _systemChannel.invokeMethod('uninstallApp', {'packageName': packageName});
+      await _systemChannel.invokeMethod('uninstallApp', {
+        'packageName': packageName,
+      });
     } catch (e) {
       print('Error uninstalling app: $e');
     }
@@ -31,7 +41,9 @@ class LauncherService {
 
   static Future<void> startApp(String packageName) async {
     try {
-      await _systemChannel.invokeMethod('startApp', {'packageName': packageName});
+      await _systemChannel.invokeMethod('startApp', {
+        'packageName': packageName,
+      });
     } catch (e) {
       print('Error starting app: $e');
     }
@@ -39,7 +51,9 @@ class LauncherService {
 
   static Future<void> openAppInfo(String packageName) async {
     try {
-      await _systemChannel.invokeMethod('appInfo', {'packageName': packageName});
+      await _systemChannel.invokeMethod('appInfo', {
+        'packageName': packageName,
+      });
     } catch (e) {
       print('Error opening app info: $e');
     }
@@ -63,7 +77,9 @@ class LauncherService {
 
   static Future<void> shareApp(String packageName) async {
     try {
-      await _systemChannel.invokeMethod('shareApp', {'packageName': packageName});
+      await _systemChannel.invokeMethod('shareApp', {
+        'packageName': packageName,
+      });
     } catch (e) {
       print('Error sharing app: $e');
     }
@@ -102,9 +118,13 @@ class LauncherService {
   static Future<List<Map<String, dynamic>>> getAllWidgets() async {
     if (_cachedWidgets != null) return _cachedWidgets!;
     try {
-      final List<dynamic>? widgets = await _widgetChannel.invokeMethod('getAllWidgets');
+      final List<dynamic>? widgets = await _widgetChannel.invokeMethod(
+        'getAllWidgets',
+      );
       if (widgets != null) {
-        _cachedWidgets = widgets.map((w) => Map<String, dynamic>.from(w as Map)).toList();
+        _cachedWidgets = widgets
+            .map((w) => Map<String, dynamic>.from(w as Map))
+            .toList();
         return _cachedWidgets!;
       }
     } catch (e) {
@@ -123,7 +143,11 @@ class LauncherService {
     }
   }
 
-  static Future<bool> bindWidget(int appWidgetId, String providerPackage, String providerClass) async {
+  static Future<bool> bindWidget(
+    int appWidgetId,
+    String providerPackage,
+    String providerClass,
+  ) async {
     try {
       final bool? success = await _widgetChannel.invokeMethod('bindWidget', {
         'appWidgetId': appWidgetId,
@@ -139,7 +163,9 @@ class LauncherService {
 
   static Future<void> deleteWidgetId(int appWidgetId) async {
     try {
-      await _widgetChannel.invokeMethod('deleteWidgetId', {'appWidgetId': appWidgetId});
+      await _widgetChannel.invokeMethod('deleteWidgetId', {
+        'appWidgetId': appWidgetId,
+      });
     } catch (e) {
       print('Error deleting widget ID: $e');
     }

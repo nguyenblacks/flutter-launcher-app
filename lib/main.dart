@@ -8,7 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // Make status bar and navigation bar transparent for edge-to-edge
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
@@ -23,7 +23,7 @@ void main() async {
   // Pre-warm icon cache from SQLite so icons show on first frame (no jank on unlock)
   final List<AppInfo> cachedApps = await AppDatabaseService.getAllApps();
   final Map<String, AppInfo> appCache = {
-    for (final app in cachedApps) app.packageName: app
+    for (final app in cachedApps) app.packageName: app,
   };
 
   // Sync fresh apps in background (won't block startup)
@@ -103,9 +103,6 @@ class FadePageTransitionsBuilder extends PageTransitionsBuilder {
     Animation<double> secondaryAnimation,
     Widget child,
   ) {
-    return FadeTransition(
-      opacity: animation,
-      child: child,
-    );
+    return FadeTransition(opacity: animation, child: child);
   }
 }
