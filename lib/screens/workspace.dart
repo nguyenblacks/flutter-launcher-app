@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:installed_apps/app_info.dart';
 import 'package:swavoti/services/launcher_service.dart';
 import 'package:swavoti/screens/home_screen.dart';
@@ -16,7 +17,7 @@ class Workspace extends StatefulWidget {
   State<Workspace> createState() => _WorkspaceState();
 }
 
-class _WorkspaceState extends State<Workspace> {
+class _WorkspaceState extends State<Workspace> with WidgetsBindingObserver {
   Map<String, int> _notifications = {};
   StreamSubscription<Map<String, int>>? _notificationSubscription;
 
@@ -26,9 +27,19 @@ class _WorkspaceState extends State<Workspace> {
       DraggableScrollableController();
   double _drawerExtent = 0.0;
 
+  // Drag bubble state
+  String? _draggingPackage;
+  bool _isDragging = false;
+
+  // Default launcher banner
+  bool _isDefaultLauncher = true;
+  bool _bannerDismissed = false;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _checkDefaultLauncher();
 
     try {
       _notificationSubscription = LauncherService.notificationsStream.listen(
@@ -42,10 +53,33 @@ class _WorkspaceState extends State<Workspace> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkDefaultLauncher();
+    }
+  }
+
+  Future<void> _checkDefaultLauncher() async {
+    final isDefault = await LauncherService.isDefaultLauncher();
+    if (mounted) setState(() => _isDefaultLauncher = isDefault);
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _notificationSubscription?.cancel();
     _sheetController.dispose();
     super.dispose();
+  }
+
+  void _openDrawer() {
+    if (_sheetController.isAttached) {
+      _sheetController.animateTo(
+        1.0,
+        duration: const Duration(milliseconds: 380),
+        curve: Curves.easeOutQuart,
+      );
+    }
   }
 
   void _closeDrawer() {
@@ -53,13 +87,29 @@ class _WorkspaceState extends State<Workspace> {
       _sheetController.animateTo(
         0.0,
         duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInCubic,
+        curve: Curves.easeInQuart,
       );
     }
   }
 
+  void _onDragStarted(String packageName) {
+    setState(() {
+      _draggingPackage = packageName;
+      _isDragging = true;
+    });
+  }
+
+  void _onDragEnded() {
+    setState(() {
+      _draggingPackage = null;
+      _isDragging = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Stack(
@@ -67,14 +117,8 @@ class _WorkspaceState extends State<Workspace> {
           // 1. Home Screen
           GestureDetector(
             onVerticalDragUpdate: (details) {
-              if (details.primaryDelta! < -10) {
-                if (_sheetController.isAttached) {
-                  _sheetController.animateTo(
-                    1.0,
-                    duration: const Duration(milliseconds: 300),
-                    curve: Curves.easeOutExpo,
-                  );
-                }
+              if (details.primaryDelta! < -8) {
+                _openDrawer();
               }
             },
             child: HomeScreen(
@@ -83,6 +127,8 @@ class _WorkspaceState extends State<Workspace> {
               appCache: widget.appCache,
               notifications: _notifications,
               onSettingsChanged: () {},
+              onDragStarted: _onDragStarted,
+              onDragEnded: _onDragEnded,
             ),
           ),
 
@@ -92,11 +138,11 @@ class _WorkspaceState extends State<Workspace> {
               child: IgnorePointer(
                 child: BackdropFilter(
                   filter: ImageFilter.blur(
-                    sigmaX: _drawerExtent * 15,
-                    sigmaY: _drawerExtent * 15,
+                    sigmaX: _drawerExtent * 18,
+                    sigmaY: _drawerExtent * 18,
                   ),
                   child: Container(
-                    color: Colors.black.withValues(alpha: _drawerExtent * 0.4),
+                    color: Colors.black.withValues(alpha: _drawerExtent * 0.5),
                   ),
                 ),
               ),
@@ -117,16 +163,219 @@ class _WorkspaceState extends State<Workspace> {
               maxChildSize: 1.0,
               snap: true,
               snapSizes: const [0.0, 1.0],
+              snapAnimationDuration: const Duration(milliseconds: 320),
+              shouldCloseOnMinExtent: false,
               builder: (context, scrollController) {
                 return AppDrawer(
                   notifications: _notifications,
                   onClose: _closeDrawer,
                   scrollController: scrollController,
+                  onDragStarted: _onDragStarted,
+                  onDragEnded: _onDragEnded,
                 );
               },
             ),
           ),
+
+          // 4. Drag Bubble — App Info / Delete overlay while dragging
+          if (_isDragging && _draggingPackage != null)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 12,
+              left: 24,
+              right: 24,
+              child: _DragBubble(
+                packageName: _draggingPackage!,
+                onDragEnded: _onDragEnded,
+              ),
+            ),
+
+          // 5. Default Launcher Banner
+          if (!_isDefaultLauncher && !_bannerDismissed)
+            Positioned(
+              bottom: bottomPadding + 110,
+              left: 16,
+              right: 16,
+              child: _DefaultLauncherBanner(
+                onDismiss: () => setState(() => _bannerDismissed = true),
+                onSetDefault: () async {
+                  await LauncherService.openDefaultLauncherSettings();
+                },
+              ),
+            ),
         ],
+      ),
+    );
+  }
+}
+
+// ─── Drag Bubble ────────────────────────────────────────────────────────────
+
+class _DragBubble extends StatelessWidget {
+  final String packageName;
+  final VoidCallback onDragEnded;
+
+  const _DragBubble({required this.packageName, required this.onDragEnded});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      decoration: BoxDecoration(
+        color: Theme.of(
+          context,
+        ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.95),
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          // App Info button
+          _BubbleAction(
+            icon: Icons.info_outline_rounded,
+            label: 'App Info',
+            color: Theme.of(context).colorScheme.primary,
+            onTap: () {
+              LauncherService.openAppInfo(packageName);
+              onDragEnded();
+            },
+          ),
+          Container(
+            width: 1,
+            height: 40,
+            color: Theme.of(context).colorScheme.outlineVariant,
+          ),
+          // Delete button
+          _BubbleAction(
+            icon: Icons.delete_outline_rounded,
+            label: 'Uninstall',
+            color: Colors.red.shade400,
+            onTap: () {
+              LauncherService.uninstallApp(packageName);
+              onDragEnded();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BubbleAction extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _BubbleAction({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color, size: 28),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Default Launcher Banner ────────────────────────────────────────────────
+
+class _DefaultLauncherBanner extends StatelessWidget {
+  final VoidCallback onDismiss;
+  final VoidCallback onSetDefault;
+
+  const _DefaultLauncherBanner({
+    required this.onDismiss,
+    required this.onSetDefault,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Theme.of(
+              context,
+            ).colorScheme.primaryContainer.withValues(alpha: 0.9),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              Icon(
+                Icons.home_outlined,
+                color: Theme.of(context).colorScheme.onPrimaryContainer,
+                size: 22,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Set as default home app for the full experience',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onPrimaryContainer,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              FilledButton.tonal(
+                onPressed: onSetDefault,
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  textStyle: const TextStyle(fontSize: 12),
+                ),
+                child: const Text('Set Default'),
+              ),
+              const SizedBox(width: 4),
+              IconButton(
+                onPressed: onDismiss,
+                icon: const Icon(Icons.close, size: 16),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                color: Theme.of(context).colorScheme.onPrimaryContainer,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

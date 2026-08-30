@@ -1,0 +1,78 @@
+name: Build & Release APK
+
+on:
+  push:
+    tags:
+      - 'v*'            # any tag starting with v: v1.0.0, v1.2.alpha, v2.0-beta, etc.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+permissions:
+  contents: write   # needed to create GitHub Releases
+
+jobs:
+  build-and-release:
+    name: Build APK & Publish Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Resolve release tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "value=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze (non-fatal)
+        run: flutter analyze --no-fatal-infos
+        continue-on-error: true
+
+      - name: Build release APK
+        run: flutter build apk --release
+
+      - name: Rename APK with version
+        run: |
+          VERSION=${{ steps.tag.outputs.value }}
+          cp build/app/outputs/flutter-apk/app-release.apk \
+             build/app/outputs/flutter-apk/swavoti-launcher-${VERSION}.apk
+
+      - name: Create GitHub Release & upload APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.value }}
+          name: "Go Launcher 7 ${{ steps.tag.outputs.value }}"
+          prerelease: ${{ contains(steps.tag.outputs.value, 'alpha') || contains(steps.tag.outputs.value, 'beta') || contains(steps.tag.outputs.value, 'rc') }}
+          body: |
+            ## 🚀 Go Launcher 7 ${{ steps.tag.outputs.value }}
+
+            ### Install
+            Download `swavoti-launcher-${{ steps.tag.outputs.value }}.apk` below and install on your Android device.
+
+            > **Note**: You may need to enable *Install from unknown sources* in your device settings.
+          draft: false
+          files: |
+            build/app/outputs/flutter-apk/swavoti-launcher-${{ steps.tag.outputs.value }}.apk

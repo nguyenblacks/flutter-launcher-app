@@ -114,6 +114,25 @@ class LauncherService {
     }
   }
 
+  static Future<bool> isDefaultLauncher() async {
+    try {
+      final bool? result = await _systemChannel.invokeMethod(
+        'isDefaultLauncher',
+      );
+      return result ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  static Future<void> openDefaultLauncherSettings() async {
+    try {
+      await _systemChannel.invokeMethod('openDefaultLauncherSettings');
+    } catch (e) {
+      print('Error opening default launcher settings: $e');
+    }
+  }
+
   // Widget Actions
   static Future<List<Map<String, dynamic>>> getAllWidgets() async {
     if (_cachedWidgets != null) return _cachedWidgets!;

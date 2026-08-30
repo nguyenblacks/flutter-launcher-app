@@ -3,6 +3,7 @@ import 'package:installed_apps/installed_apps.dart';
 import 'package:installed_apps/app_info.dart';
 import 'package:swavoti/services/launcher_service.dart';
 import 'package:swavoti/services/app_database_service.dart';
+import 'package:swavoti/widgets/icon_shape_clipper.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AppDrawer extends StatefulWidget {
@@ -10,6 +11,8 @@ class AppDrawer extends StatefulWidget {
   final VoidCallback onClose;
   final void Function(Map<String, dynamic>)? onAddToHomeScreen;
   final ScrollController scrollController;
+  final void Function(String packageName)? onDragStarted;
+  final VoidCallback? onDragEnded;
 
   const AppDrawer({
     super.key,
@@ -17,6 +20,8 @@ class AppDrawer extends StatefulWidget {
     required this.onClose,
     this.onAddToHomeScreen,
     required this.scrollController,
+    this.onDragStarted,
+    this.onDragEnded,
   });
 
   @override
@@ -46,18 +51,42 @@ class _AppDrawerState extends State<AppDrawer> {
   List<AppInfo> _filteredApps = [];
   bool _isLoading = true;
   final TextEditingController _searchController = TextEditingController();
+  String _iconShape = 'Circle';
+
+  // A-Z sidebar
+  final Map<String, int> _letterIndex = {}; // letter -> first grid index
+  String? _hoveredLetter;
+  OverlayEntry? _letterOverlay;
+
+  // Grid scroll key for alphabet jump
+  final GlobalKey _gridKey = GlobalKey();
+
+  // Approximate row height in the grid
+  static const double _cellSize = 90.0; // approx icon cell height
+  static const int _gridColumns = 4;
 
   @override
   void initState() {
     super.initState();
     _loadApps();
+    _loadIconShape();
     _searchController.addListener(_filterApps);
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _letterOverlay?.remove();
     super.dispose();
+  }
+
+  Future<void> _loadIconShape() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(() {
+        _iconShape = prefs.getString('icon_shape') ?? 'Circle';
+      });
+    }
   }
 
   Future<void> _loadApps() async {
@@ -78,6 +107,7 @@ class _AppDrawerState extends State<AppDrawer> {
           _filteredApps = cachedApps;
           _isLoading = false;
         });
+        _buildLetterIndex(cachedApps);
       }
     }
 
@@ -91,10 +121,23 @@ class _AppDrawerState extends State<AppDrawer> {
             .toList();
         _isLoading = false;
       });
+      _buildLetterIndex(_filteredApps);
     } else if (cachedApps.isEmpty && mounted) {
       setState(() {
         _isLoading = false;
       });
+    }
+  }
+
+  void _buildLetterIndex(List<AppInfo> apps) {
+    _letterIndex.clear();
+    for (int i = 0; i < apps.length; i++) {
+      final firstChar = apps[i].name.isNotEmpty
+          ? apps[i].name[0].toUpperCase()
+          : '#';
+      if (!_letterIndex.containsKey(firstChar)) {
+        _letterIndex[firstChar] = i;
+      }
     }
   }
 
@@ -105,6 +148,59 @@ class _AppDrawerState extends State<AppDrawer> {
           .where((app) => app.name.toLowerCase().contains(query))
           .toList();
     });
+    _buildLetterIndex(_filteredApps);
+  }
+
+  void _jumpToLetter(String letter) {
+    final index = _letterIndex[letter];
+    if (index == null) return;
+
+    // Header sliver height estimate: search bar (~56) + top padding (~32) + suggested apps (~120) + divider(~20) = ~228
+    const headerHeight = 228.0;
+    final row = (index / _gridColumns).floor();
+    final offset = headerHeight + row * _cellSize;
+
+    widget.scrollController.animateTo(
+      offset.clamp(0.0, widget.scrollController.position.maxScrollExtent),
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+    );
+  }
+
+  void _showLetterBubble(String letter) {
+    _letterOverlay?.remove();
+    final overlay = Overlay.of(context);
+    _letterOverlay = OverlayEntry(
+      builder: (context) => Center(
+        child: IgnorePointer(
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                letter,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onPrimary,
+                  fontSize: 36,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    overlay.insert(_letterOverlay!);
+    Future.delayed(const Duration(milliseconds: 700), () {
+      _letterOverlay?.remove();
+      _letterOverlay = null;
+    });
   }
 
   @override
@@ -112,122 +208,256 @@ class _AppDrawerState extends State<AppDrawer> {
     return Container(
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
       ),
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      child: CustomScrollView(
-        controller: widget.scrollController,
-        slivers: [
-          SliverToBoxAdapter(
-            child: Column(
-              children: [
-                // Pull handle
-                Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onSurfaceVariant.withOpacity(0.4),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                // Search box
-                TextField(
-                  controller: _searchController,
-                  decoration: InputDecoration(
-                    hintText: 'Search Apps...',
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: _searchController.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () => _searchController.clear(),
-                          )
-                        : null,
-                    filled: true,
-                    fillColor: Theme.of(
-                      context,
-                    ).colorScheme.surfaceVariant.withOpacity(0.5),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(28),
-                      borderSide: BorderSide.none,
+      child: Row(
+        children: [
+          // Main drawer content
+          Expanded(
+            child: CustomScrollView(
+              controller: widget.scrollController,
+              physics: const ClampingScrollPhysics(),
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 8, 0),
+                    child: Column(
+                      children: [
+                        // Pull handle
+                        Center(
+                          child: Container(
+                            width: 40,
+                            height: 4,
+                            margin: const EdgeInsets.only(bottom: 14),
+                            decoration: BoxDecoration(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant.withOpacity(0.35),
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                        ),
+                        // Search box
+                        TextField(
+                          controller: _searchController,
+                          decoration: InputDecoration(
+                            hintText: 'Search Apps...',
+                            prefixIcon: const Icon(Icons.search),
+                            suffixIcon: _searchController.text.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear),
+                                    onPressed: () => _searchController.clear(),
+                                  )
+                                : null,
+                            filled: true,
+                            fillColor: Theme.of(
+                              context,
+                            ).colorScheme.surfaceVariant.withOpacity(0.5),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(28),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        // Suggested row (first 4 apps)
+                        if (_searchController.text.isEmpty &&
+                            _filteredApps.length >= 4) ...[
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: _filteredApps.take(4).map((app) {
+                              final notificationCount =
+                                  widget.notifications[app.packageName] ?? 0;
+                              return Expanded(
+                                child: _AppDrawerItem(
+                                  app: app,
+                                  notificationCount: notificationCount,
+                                  onCloseDrawer: widget.onClose,
+                                  iconShape: _iconShape,
+                                  onDragStarted: widget.onDragStarted,
+                                  onDragEnded: widget.onDragEnded,
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                          const SizedBox(height: 8),
+                          const Divider(height: 1),
+                          const SizedBox(height: 8),
+                        ],
+                      ],
                     ),
                   ),
                 ),
-                const SizedBox(height: 16),
-                if (_searchController.text.isEmpty &&
-                    _filteredApps.length >= 4) ...[
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8.0,
-                      vertical: 8,
+                if (_isLoading)
+                  const SliverToBoxAdapter(child: SizedBox.shrink())
+                else if (_filteredApps.isEmpty)
+                  const SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.all(32),
+                      child: Center(child: Text('No apps found.')),
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: _filteredApps.take(4).map((app) {
+                  )
+                else
+                  SliverPadding(
+                    key: _gridKey,
+                    padding: const EdgeInsets.fromLTRB(16, 0, 0, 24),
+                    sliver: SliverGrid(
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: _gridColumns,
+                            mainAxisSpacing: 12,
+                            crossAxisSpacing: 8,
+                            childAspectRatio: 0.82,
+                          ),
+                      delegate: SliverChildBuilderDelegate((context, index) {
+                        final app = _filteredApps[index];
                         final notificationCount =
                             widget.notifications[app.packageName] ?? 0;
-                        return Expanded(
-                          child: _AppDrawerItem(
-                            app: app,
-                            notificationCount: notificationCount,
-                            onCloseDrawer: widget.onClose,
-                          ),
+                        return _AppDrawerItem(
+                          app: app,
+                          notificationCount: notificationCount,
+                          onCloseDrawer: widget.onClose,
+                          iconShape: _iconShape,
+                          onDragStarted: widget.onDragStarted,
+                          onDragEnded: widget.onDragEnded,
                         );
-                      }).toList(),
+                      }, childCount: _filteredApps.length),
                     ),
                   ),
-                  const Divider(),
-                  const SizedBox(height: 8),
-                ],
               ],
             ),
           ),
-          if (_isLoading)
-            const SliverToBoxAdapter(child: SizedBox.shrink())
-          else if (_filteredApps.isEmpty)
-            const SliverToBoxAdapter(
-              child: Padding(
-                padding: EdgeInsets.all(32),
-                child: Center(child: Text('No apps found.')),
-              ),
-            )
-          else
-            SliverGrid(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 4,
-                mainAxisSpacing: 16,
-                crossAxisSpacing: 16,
-                childAspectRatio: 0.85,
-              ),
-              delegate: SliverChildBuilderDelegate((context, index) {
-                final app = _filteredApps[index];
-                final notificationCount =
-                    widget.notifications[app.packageName] ?? 0;
-                return _AppDrawerItem(
-                  app: app,
-                  notificationCount: notificationCount,
-                  onCloseDrawer: widget.onClose,
-                );
-              }, childCount: _filteredApps.length),
+
+          // A-Z Sidebar
+          if (_searchController.text.isEmpty)
+            _AlphabetSidebar(
+              letterIndex: _letterIndex,
+              onLetterTap: (letter) {
+                _jumpToLetter(letter);
+                _showLetterBubble(letter);
+              },
             ),
-          const SliverToBoxAdapter(child: SizedBox(height: 24)),
         ],
       ),
     );
   }
 }
 
+// ─── Alphabet Sidebar ────────────────────────────────────────────────────────
+
+class _AlphabetSidebar extends StatefulWidget {
+  final Map<String, int> letterIndex;
+  final void Function(String letter) onLetterTap;
+
+  const _AlphabetSidebar({
+    required this.letterIndex,
+    required this.onLetterTap,
+  });
+
+  @override
+  State<_AlphabetSidebar> createState() => _AlphabetSidebarState();
+}
+
+class _AlphabetSidebarState extends State<_AlphabetSidebar> {
+  String? _pressed;
+  static const List<String> _allLetters = [
+    'A',
+    'B',
+    'C',
+    'D',
+    'E',
+    'F',
+    'G',
+    'H',
+    'I',
+    'J',
+    'K',
+    'L',
+    'M',
+    'N',
+    'O',
+    'P',
+    'Q',
+    'R',
+    'S',
+    'T',
+    'U',
+    'V',
+    'W',
+    'X',
+    'Y',
+    'Z',
+    '#',
+  ];
+
+  void _handleTouch(Offset localPosition, double sidebarHeight) {
+    final fraction = (localPosition.dy / sidebarHeight).clamp(0.0, 1.0);
+    final idx = (fraction * (_allLetters.length - 1)).round();
+    final letter = _allLetters[idx];
+    if (letter != _pressed && widget.letterIndex.containsKey(letter)) {
+      setState(() => _pressed = letter);
+      widget.onLetterTap(letter);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (d) {
+        final box = context.findRenderObject() as RenderBox?;
+        if (box != null) _handleTouch(d.localPosition, box.size.height);
+      },
+      onVerticalDragUpdate: (d) {
+        final box = context.findRenderObject() as RenderBox?;
+        if (box != null) _handleTouch(d.localPosition, box.size.height);
+      },
+      onVerticalDragEnd: (_) => setState(() => _pressed = null),
+      onTapUp: (_) => setState(() => _pressed = null),
+      child: Container(
+        width: 22,
+        margin: const EdgeInsets.only(right: 4),
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: _allLetters.map((l) {
+            final hasApps = widget.letterIndex.containsKey(l);
+            final isPressed = _pressed == l;
+            return Text(
+              l,
+              style: TextStyle(
+                fontSize: isPressed ? 13 : 10,
+                fontWeight: isPressed ? FontWeight.bold : FontWeight.normal,
+                color: hasApps
+                    ? (isPressed
+                          ? Theme.of(context).colorScheme.primary
+                          : Theme.of(context).colorScheme.onSurface)
+                    : Theme.of(context).colorScheme.onSurface.withOpacity(0.25),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── App Drawer Item ─────────────────────────────────────────────────────────
+
 class _AppDrawerItem extends StatefulWidget {
   final AppInfo app;
   final int notificationCount;
   final VoidCallback onCloseDrawer;
+  final String iconShape;
+  final void Function(String packageName)? onDragStarted;
+  final VoidCallback? onDragEnded;
 
   const _AppDrawerItem({
     required this.app,
     required this.notificationCount,
     required this.onCloseDrawer,
+    required this.iconShape,
+    this.onDragStarted,
+    this.onDragEnded,
   });
 
   @override
@@ -252,18 +482,31 @@ class _AppDrawerItemState extends State<_AppDrawerItem>
     return LongPressDraggable<Map<String, dynamic>>(
       data: appItemData,
       delay: const Duration(milliseconds: 150),
-      onDragStarted: widget.onCloseDrawer, // Closes drawer when dragged!
+      onDragStarted: () {
+        widget.onCloseDrawer();
+        widget.onDragStarted?.call(app.packageName);
+      },
+      onDragEnd: (_) => widget.onDragEnded?.call(),
+      onDraggableCanceled: (_, __) => widget.onDragEnded?.call(),
       feedback: Material(
         color: Colors.transparent,
         child: Opacity(
-          opacity: 0.8,
+          opacity: 0.85,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (icon != null)
-                Image.memory(icon, width: 56, height: 56)
-              else
-                const Icon(Icons.android, size: 56),
+              IconShapeClipper(
+                shape: widget.iconShape,
+                size: 56,
+                child: icon != null
+                    ? Image.memory(
+                        icon,
+                        width: 56,
+                        height: 56,
+                        fit: BoxFit.cover,
+                      )
+                    : const Icon(Icons.android, size: 56),
+              ),
               const SizedBox(height: 4),
               Text(
                 app.name,
@@ -271,6 +514,7 @@ class _AppDrawerItemState extends State<_AppDrawerItem>
                   color: Colors.white,
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
+                  shadows: [Shadow(blurRadius: 4, color: Colors.black54)],
                 ),
               ),
             ],
@@ -278,13 +522,12 @@ class _AppDrawerItemState extends State<_AppDrawerItem>
         ),
       ),
       childWhenDragging: Opacity(
-        opacity: 0.3,
+        opacity: 0.25,
         child: Column(
           children: [
-            if (icon != null)
-              Image.memory(icon, width: 48, height: 48)
-            else
-              const Icon(Icons.android, size: 48),
+            icon != null
+                ? Image.memory(icon, width: 48, height: 48)
+                : const Icon(Icons.android, size: 48),
             const SizedBox(height: 4),
             Text(
               app.name,
@@ -297,15 +540,22 @@ class _AppDrawerItemState extends State<_AppDrawerItem>
       ),
       child: GestureDetector(
         onTap: () => LauncherService.startApp(app.packageName),
-        // Removed onLongPress so LongPressDraggable can work natively without conflict
         child: Column(
           children: [
             Stack(
               children: [
-                if (icon != null)
-                  Image.memory(icon, width: 48, height: 48)
-                else
-                  const Icon(Icons.android, size: 48),
+                IconShapeClipper(
+                  shape: widget.iconShape,
+                  size: 48,
+                  child: icon != null
+                      ? Image.memory(
+                          icon,
+                          width: 48,
+                          height: 48,
+                          fit: BoxFit.cover,
+                        )
+                      : const Icon(Icons.android, size: 48),
+                ),
                 if (widget.notificationCount > 0)
                   Positioned(
                     right: 0,

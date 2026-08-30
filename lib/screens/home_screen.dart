@@ -10,6 +10,7 @@ import 'package:swavoti/screens/home_settings.dart';
 import 'package:swavoti/screens/wallpaper_page.dart';
 import 'package:swavoti/screens/discover_news.dart';
 import 'package:swavoti/widgets/time_weather_widget.dart';
+import 'package:swavoti/widgets/icon_shape_clipper.dart';
 import 'dart:async';
 
 class LauncherItem {
@@ -74,6 +75,8 @@ class HomeScreen extends StatefulWidget {
   final Map<String, int> notifications;
   final VoidCallback onSettingsChanged;
   final void Function(Map<String, dynamic>)? onAddAppToHomeScreen;
+  final void Function(String packageName)? onDragStarted;
+  final VoidCallback? onDragEnded;
 
   const HomeScreen({
     super.key,
@@ -82,6 +85,8 @@ class HomeScreen extends StatefulWidget {
     required this.notifications,
     required this.onSettingsChanged,
     this.onAddAppToHomeScreen,
+    this.onDragStarted,
+    this.onDragEnded,
   });
 
   @override
@@ -94,29 +99,32 @@ class HomeScreenState extends State<HomeScreen> {
   bool _showTimeWeather = true;
   bool _isDragging = false;
   bool _isNavigatingToDiscover = false;
+  String _iconShape = 'Circle';
 
   // Grid Configuration
   final int _columns = 4;
   final int _rows = 5;
+
+  // Always 3 workspace pages minimum
+  static const int _minPages = 3;
   int _currentWorkspacePage = 0;
   late final PageController _workspaceController;
 
   int get _totalPages {
-    if (_items.isEmpty) return 1;
+    if (_items.isEmpty) return _minPages;
     int maxPage = _items.fold<int>(
       0,
       (max, item) => item.page > max && item.page >= 0 ? item.page : max,
     );
-    return maxPage + 2; // extra blank page at end for adding new pages
+    // at least _minPages, always one extra blank at end
+    return (maxPage + 2).clamp(_minPages, 999);
   }
 
   @override
   void initState() {
     super.initState();
     LauncherService.preloadWidgets();
-    _appCache = Map<String, AppInfo>.from(
-      widget.appCache,
-    ); // seed with pre-warmed cache
+    _appCache = Map<String, AppInfo>.from(widget.appCache);
     _loadItemsSync();
     _loadSettingsSync();
     _workspaceController = PageController(initialPage: 0);
@@ -130,6 +138,17 @@ class HomeScreenState extends State<HomeScreen> {
 
   void _loadSettingsSync() {
     _showTimeWeather = widget.prefs.getBool('show_time_weather') ?? true;
+    _iconShape = widget.prefs.getString('icon_shape') ?? 'Circle';
+  }
+
+  Future<void> _reloadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(() {
+        _showTimeWeather = prefs.getBool('show_time_weather') ?? true;
+        _iconShape = prefs.getString('icon_shape') ?? 'Circle';
+      });
+    }
   }
 
   void _loadItemsSync() {
@@ -236,9 +255,7 @@ class HomeScreenState extends State<HomeScreen> {
                         ),
                       ).then((_) {
                         widget.onSettingsChanged();
-                        setState(() {
-                          _loadSettingsSync();
-                        });
+                        _reloadSettings();
                       });
                     },
                   ),
@@ -322,10 +339,8 @@ class HomeScreenState extends State<HomeScreen> {
   }
 
   void addAppToWorkspace(String packageName, String label) {
-    // Find the first empty 1x1 slot on the current page
     for (int y = 0; y < _rows; y++) {
       for (int x = 0; x < _columns; x++) {
-        // Check if any item occupies (x, y) on _currentWorkspacePage
         final isOccupied = _items.any(
           (item) =>
               item.page == _currentWorkspacePage &&
@@ -351,24 +366,20 @@ class HomeScreenState extends State<HomeScreen> {
         }
       }
     }
-    // If no space, show a snackbar
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('No space left on this workspace page!')),
     );
   }
 
   void addWidgetToWorkspace(Map<String, dynamic> widgetData, int widgetId) {
-    // Try to find a 4x2 space on the current page
     final spanX = 4;
     final spanY = 2;
 
     for (int y = 0; y <= _rows - spanY; y++) {
       for (int x = 0; x <= _columns - spanX; x++) {
-        // Check if any item occupies any cell in this span
         bool isOccupied = false;
         for (final item in _items) {
           if (item.page == _currentWorkspacePage) {
-            // Check overlap
             if (x < item.x + item.spanX &&
                 x + spanX > item.x &&
                 y < item.y + item.spanY &&
@@ -400,7 +411,6 @@ class HomeScreenState extends State<HomeScreen> {
       }
     }
 
-    // If no space, we can't place it. Should probably delete the widget ID to prevent leaks.
     LauncherService.deleteWidgetId(widgetId);
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -416,10 +426,9 @@ class HomeScreenState extends State<HomeScreen> {
     final statusBarHeight = MediaQuery.of(context).padding.top;
 
     return GestureDetector(
-      onLongPress:
-          _showWorkspaceMenu, // open workspace menu for wallpapers, widgets, settings
+      onLongPress: _showWorkspaceMenu,
       child: Container(
-        color: Colors.transparent, // Capture taps across screen
+        color: Colors.transparent,
         child: Column(
           children: [
             SizedBox(height: statusBarHeight + 16),
@@ -433,7 +442,7 @@ class HomeScreenState extends State<HomeScreen> {
                 },
               ),
 
-            // Workspace Grid (Apps & Widgets)
+            // Workspace Grid
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -444,7 +453,6 @@ class HomeScreenState extends State<HomeScreen> {
 
                     return NotificationListener<OverscrollNotification>(
                       onNotification: (notification) {
-                        // Overscroll to the left on the first workspace -> open Discover
                         if (_currentWorkspacePage == 0 &&
                             notification.overscroll < -50 &&
                             !_isNavigatingToDiscover) {
@@ -480,7 +488,9 @@ class HomeScreenState extends State<HomeScreen> {
                         return false;
                       },
                       child: PageView.builder(
-                        physics: const BouncingScrollPhysics(),
+                        physics: const BouncingScrollPhysics(
+                          parent: AlwaysScrollableScrollPhysics(),
+                        ),
                         controller: _workspaceController,
                         itemCount: _totalPages,
                         onPageChanged: (index) {
@@ -494,7 +504,7 @@ class HomeScreenState extends State<HomeScreen> {
 
                           return Stack(
                             children: [
-                              // Grid lines or drag targets
+                              // Drop targets
                               for (int y = 0; y < _rows; y++)
                                 for (int x = 0; x < _columns; x++)
                                   Positioned(
@@ -521,7 +531,6 @@ class HomeScreenState extends State<HomeScreen> {
                                         );
 
                                         if (data['id'] != null) {
-                                          // Move existing item
                                           final itemId = data['id'] as String;
                                           setState(() {
                                             final item = _items.firstWhere(
@@ -533,7 +542,6 @@ class HomeScreenState extends State<HomeScreen> {
                                           });
                                           _saveItems();
                                         } else if (data['type'] == 'app') {
-                                          // Add new app
                                           _addNewItem(
                                             LauncherItem(
                                               id: DateTime.now()
@@ -584,34 +592,29 @@ class HomeScreenState extends State<HomeScreen> {
                                           });
                                         }
                                       },
-                                      builder:
-                                          (
-                                            context,
-                                            candidateData,
-                                            rejectedData,
-                                          ) {
-                                            return Container(
-                                              margin: const EdgeInsets.all(4),
-                                              decoration: BoxDecoration(
-                                                border: Border.all(
-                                                  color:
-                                                      candidateData.isNotEmpty
-                                                      ? Theme.of(context)
-                                                            .colorScheme
-                                                            .primary
-                                                            .withOpacity(0.5)
-                                                      : Colors.transparent,
-                                                  width: 2,
-                                                ),
-                                                borderRadius:
-                                                    BorderRadius.circular(12),
-                                              ),
-                                            );
-                                          },
+                                      builder: (context, candidateData, _) {
+                                        return Container(
+                                          margin: const EdgeInsets.all(4),
+                                          decoration: BoxDecoration(
+                                            border: Border.all(
+                                              color: candidateData.isNotEmpty
+                                                  ? Theme.of(context)
+                                                        .colorScheme
+                                                        .primary
+                                                        .withOpacity(0.5)
+                                                  : Colors.transparent,
+                                              width: 2,
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                          ),
+                                        );
+                                      },
                                     ),
                                   ),
 
-                              // Placed Items on this page
+                              // Placed Items
                               ...pageItems.map((item) {
                                 return Positioned(
                                   left: item.x * cellWidth,
@@ -624,12 +627,22 @@ class HomeScreenState extends State<HomeScreen> {
                                         delay: const Duration(
                                           milliseconds: 150,
                                         ),
-                                        onDragStarted: () =>
-                                            setState(() => _isDragging = true),
-                                        onDragEnd: (_) =>
-                                            setState(() => _isDragging = false),
-                                        onDraggableCanceled: (_, __) =>
-                                            setState(() => _isDragging = false),
+                                        onDragStarted: () {
+                                          setState(() => _isDragging = true);
+                                          if (item.type == 'app') {
+                                            widget.onDragStarted?.call(
+                                              item.packageName,
+                                            );
+                                          }
+                                        },
+                                        onDragEnd: (_) {
+                                          setState(() => _isDragging = false);
+                                          widget.onDragEnded?.call();
+                                        },
+                                        onDraggableCanceled: (_, __) {
+                                          setState(() => _isDragging = false);
+                                          widget.onDragEnded?.call();
+                                        },
                                         feedback: Material(
                                           color: Colors.transparent,
                                           child: Opacity(
@@ -656,7 +669,7 @@ class HomeScreenState extends State<HomeScreen> {
                                 );
                               }),
 
-                              // Edge drag to previous page
+                              // Edge drag prev page
                               if (_isDragging && pageIndex > 0)
                                 Positioned(
                                   left: 0,
@@ -683,7 +696,7 @@ class HomeScreenState extends State<HomeScreen> {
                                   ),
                                 ),
 
-                              // Edge drag to next page
+                              // Edge drag next page
                               if (_isDragging && pageIndex < _totalPages - 1)
                                 Positioned(
                                   right: 0,
@@ -718,13 +731,13 @@ class HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ),
-            // Workspace Page Indicator (At bottom)
-            // Shows one extra dot for the Discover page (left of page 0)
-            const SizedBox(height: 16),
+
+            // ── Pill Dot Page Indicators ──────────────────────────────
+            const SizedBox(height: 12),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Discover dot
+                // Discover dot (outlined)
                 GestureDetector(
                   onTap: () {
                     if (!_isNavigatingToDiscover) {
@@ -732,9 +745,9 @@ class HomeScreenState extends State<HomeScreen> {
                       Navigator.of(context)
                           .push(
                             PageRouteBuilder(
-                              pageBuilder: (_, _, _) =>
+                              pageBuilder: (_, __, ___) =>
                                   const DiscoverNewsPage(),
-                              transitionsBuilder: (_, animation, _, child) =>
+                              transitionsBuilder: (_, animation, __, child) =>
                                   SlideTransition(
                                     position:
                                         Tween<Offset>(
@@ -757,25 +770,28 @@ class HomeScreenState extends State<HomeScreen> {
                     }
                   },
                   child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
                     width: 8,
                     height: 8,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white54, width: 1.5),
+                      border: Border.all(color: Colors.white60, width: 1.5),
                       color: Colors.transparent,
                     ),
                   ),
                 ),
-                // Workspace dots
+                // Workspace pill dots
                 ...List.generate(_totalPages, (index) {
-                  return Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                    width: 8,
+                  final isActive = _currentWorkspacePage == index;
+                  return AnimatedContainer(
+                    duration: const Duration(milliseconds: 250),
+                    curve: Curves.easeOutCubic,
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    width: isActive ? 22 : 8,
                     height: 8,
                     decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: _currentWorkspacePage == index
+                      borderRadius: BorderRadius.circular(4),
+                      color: isActive
                           ? Colors.white
                           : Colors.white.withValues(alpha: 0.35),
                     ),
@@ -783,7 +799,7 @@ class HomeScreenState extends State<HomeScreen> {
                 }),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
 
             // Persistent Remove Zone — only visible while dragging
             if (_isDragging)
@@ -795,6 +811,7 @@ class HomeScreenState extends State<HomeScreen> {
                     _removeItem(item);
                   }
                   setState(() => _isDragging = false);
+                  widget.onDragEnded?.call();
                 },
                 builder: (context, candidateData, rejectedData) {
                   final isHovered = candidateData.isNotEmpty;
@@ -829,7 +846,6 @@ class HomeScreenState extends State<HomeScreen> {
 
                   return Stack(
                     children: [
-                      // Drop targets for the 4 dock slots
                       for (int x = 0; x < 4; x++)
                         Positioned(
                           left: x * cellWidth,
@@ -884,7 +900,6 @@ class HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
 
-                      // Dock Items
                       ...dockItems.map((item) {
                         return Positioned(
                           left: item.x * cellWidth,
@@ -894,12 +909,20 @@ class HomeScreenState extends State<HomeScreen> {
                           child: LongPressDraggable<Map<String, dynamic>>(
                             data: item.toJson(),
                             delay: const Duration(milliseconds: 150),
-                            onDragStarted: () =>
-                                setState(() => _isDragging = true),
-                            onDragEnd: (_) =>
-                                setState(() => _isDragging = false),
-                            onDraggableCanceled: (_, __) =>
-                                setState(() => _isDragging = false),
+                            onDragStarted: () {
+                              setState(() => _isDragging = true);
+                              if (item.type == 'app') {
+                                widget.onDragStarted?.call(item.packageName);
+                              }
+                            },
+                            onDragEnd: (_) {
+                              setState(() => _isDragging = false);
+                              widget.onDragEnded?.call();
+                            },
+                            onDraggableCanceled: (_, __) {
+                              setState(() => _isDragging = false);
+                              widget.onDragEnded?.call();
+                            },
                             feedback: Material(
                               color: Colors.transparent,
                               child: Opacity(
@@ -948,7 +971,6 @@ class HomeScreenState extends State<HomeScreen> {
         ),
       );
     } else {
-      // App icon
       return FutureBuilder<AppInfo?>(
         future: _getAppInfo(item.packageName),
         builder: (context, snapshot) {
@@ -965,10 +987,18 @@ class HomeScreenState extends State<HomeScreen> {
               children: [
                 Stack(
                   children: [
-                    if (app.icon != null)
-                      Image.memory(app.icon!, width: 48, height: 48)
-                    else
-                      const Icon(Icons.android, size: 48),
+                    IconShapeClipper(
+                      shape: _iconShape,
+                      size: 48,
+                      child: app.icon != null
+                          ? Image.memory(
+                              app.icon!,
+                              width: 48,
+                              height: 48,
+                              fit: BoxFit.cover,
+                            )
+                          : const Icon(Icons.android, size: 48),
+                    ),
                     if (notificationCount > 0)
                       Positioned(
                         right: 0,

@@ -249,6 +249,38 @@ class MainActivity : FlutterActivity() {
                     } catch (e: Exception) {}
                     result.success(null)
                 }
+                "isDefaultLauncher" -> {
+                    try {
+                        val intent = Intent(Intent.ACTION_MAIN)
+                        intent.addCategory(Intent.CATEGORY_HOME)
+                        val resolveInfo = packageManager.resolveActivity(
+                            intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY
+                        )
+                        val isDefault = resolveInfo?.activityInfo?.packageName == packageName
+                        result.success(isDefault)
+                    } catch (e: Exception) {
+                        result.success(false)
+                    }
+                }
+                "openDefaultLauncherSettings" -> {
+                    try {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            val roleManager = getSystemService(android.app.role.RoleManager::class.java)
+                            if (roleManager != null && !roleManager.isRoleHeld(android.app.role.RoleManager.ROLE_HOME)) {
+                                val roleIntent = roleManager.createRequestRoleIntent(android.app.role.RoleManager.ROLE_HOME)
+                                startActivity(roleIntent)
+                            }
+                        } else {
+                            val intent = Intent(Settings.ACTION_HOME_SETTINGS)
+                            startActivity(intent)
+                        }
+                    } catch (e: Exception) {
+                        try {
+                            startActivity(Intent(Settings.ACTION_HOME_SETTINGS))
+                        } catch (_: Exception) {}
+                    }
+                    result.success(null)
+                }
                 "launchGoogleWeather" -> {
                     try {
                         // Method 1: Exported Activity
